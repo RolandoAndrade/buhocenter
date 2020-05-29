@@ -1,0 +1,44 @@
+/* base.css */
+body{
+    font-family: 'Questrial', sans-serif !important;
+    height: 100%;
+    background: #f3f3f3;
+}
+
+ .v-application--wrap {
+     background: #f3f3f3;
+ }
+
+/* YUI Base css http://developer.yahoo.com/yui/base/ */
+
+h1 {
+    font-size: 22px;
+}
+
+h2 {
+    /*16px via YUI Fonts CSS foundation*/
+    font-size:20px;
+}
+
+h3 {
+    /*14px via YUI Fonts CSS foundation*/
+    font-size:18px;
+}
+
+/* margin and padding values are reset for all these elements
+ * you could remove from there elements you do not used in your documents, but I don't think it'd worth it
+ */
+body, p, dl, dt, dd, ul, ol, li, h1, h2, h3, h4, h5, h6, pre, code, form, fieldset, legend, input, button, textarea, blockquote, th, td {
+    margin: 0;
+    padding: 0;
+}
+
+h1,h2,h3,h4,h5,h6,p,blockquote,ul,ol,dl {
+    margin:1em 0;
+}
+
+h1,h2,h3,h4,h5,h6,strong,th,dt,b {
+    font-weight:bold;
+}
+
+

@@ -1,0 +1,16 @@
+export default {
+    mutations: {
+        SET_ADDRESSES: 'SET_ADDRESSES',
+        DISPLAY_DIALOG: 'DISPLAY_DIALOG',
+    },
+    getters: {
+        GET_ADDRESSES: 'GET_ADDRESSES',
+    },
+    actions: {
+        CREATE_ADDRESS: 'CREATE_ADDRESS',
+        FETCH_ADDRESSES: 'FETCH_ADDRESSES',
+        DELETE_ADDRESS: 'DELETE_ADDRESS',
+        SET_DEFAULT_ADDRESS: 'SET_DEFAULT_ADDRESS',
+        SHOW_CREATE_ADDRESS_DIALOG: 'SHOW_CREATE_ADDRESS_DIALOG',
+    },
+};

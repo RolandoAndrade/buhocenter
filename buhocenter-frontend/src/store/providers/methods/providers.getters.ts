@@ -1,0 +1,1 @@
+export const GET_PROVIDERS = 'GET_PROVIDERS';
