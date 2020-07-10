@@ -37,5 +37,10 @@ lerna-debug.log*
 !.vscode/extensions.json
 
 # TypeORM
+src/database/migrations
 ormconfig.json
 .env
+
+# Files
+*.pdf
+*.csv

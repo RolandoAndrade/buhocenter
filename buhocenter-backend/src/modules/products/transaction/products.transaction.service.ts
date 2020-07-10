@@ -1,23 +1,21 @@
-import { Injectable, Inject } from "@nestjs/common";
-import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { InjectConnection } from "@nestjs/typeorm";
-import { Logger } from "winston";
+import { Injectable, Inject } from '@nestjs/common';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
+import { InjectConnection } from '@nestjs/typeorm';
+import { Logger } from 'winston';
 import { Connection } from 'typeorm';
-import { ProductsService } from "../services/products.service";
-import { 
-    ProductDTO ,ProductsAO,
-    dimensionDto ,categoryDto,
-    InventoryProductDto
-} from '../dto/products.dto'
-import { Product } from '../entities/product.entity'
-import { Brand } from '../entities/brand.entity'
-import { Provider } from '../entities/provider.entity'
-import { Category } from '../entities/category.entity'
-import { BrandsService } from '../services/brands.service'
-import { ProvidersService } from '../services/providers.service'
-import { CategoriesService } from '../services/categories.service'
-import { CataloguesService } from '../services/catalogues.service'
-import { Catalogue } from '../entities/catalogue.entity'
+import { ProductsService } from '../services/products.service';
+import { ProductDTO, ProductsAO, dimensionDto, categoryDto, InventoryProductDto } from '../dto/products.dto';
+import { OfferAssignProductDto } from '../dto/offers.dto';
+
+import { Product } from '../entities/product.entity';
+import { Brand } from '../entities/brand.entity';
+import { Provider } from '../entities/provider.entity';
+import { Category } from '../entities/category.entity';
+import { BrandsService } from '../services/brands.service';
+import { ProvidersService } from '../services/providers.service';
+import { CategoriesService } from '../services/categories.service';
+import { CataloguesService } from '../services/catalogues.service';
+import { Catalogue } from '../entities/catalogue.entity';
 
 @Injectable()
 export class ProductTransactionsRepository {
@@ -28,154 +26,161 @@ export class ProductTransactionsRepository {
         private readonly brandsService: BrandsService,
         private readonly providersService: ProvidersService,
         private readonly categoriesService: CategoriesService,
-        private readonly cataloguesService: CataloguesService
+        private readonly cataloguesService: CataloguesService,
     ) {}
 
-
-    public async updateProductData( product : Partial<ProductsAO> ): Promise<string> {
-        this.logger.info(`updateProductData: starting update of producto : [product=${JSON.stringify(product)}]`,
-            { context: ProductTransactionsRepository.name });
-
-        return await this.connection.transaction(async transactionalEntityManage => {
-            return await this.productsService.updateUsersProduct(product.id , product);
-        })
-    }
-
-    public async deleteProduct( productID : number ): Promise<string> {
-        this.logger.info(`deleteProduct: starting delete of producto id: [product=${productID}]`,
-            { context: ProductTransactionsRepository.name });
-
-        return await this.connection.transaction(async transactionalEntityManage => {
-            return await this.productsService.deleteProduct(productID);
-        })
-    }
-
-    public async getAllBrands(): Promise<Brand[]>{
+    public async updateProductData(product: Partial<ProductsAO>): Promise<string> {
         this.logger.info(
-            `getAllBrands: getting all brands accessibles`,
-            { context: ProductTransactionsRepository.name }
+            `updateProductData: starting update of producto : [product=${JSON.stringify(product)}]`,
+            { context: ProductTransactionsRepository.name },
         );
+
+        return await this.connection.transaction(async transactionalEntityManage => {
+            return await this.productsService.updateUsersProduct(product.id, product);
+        });
+    }
+
+    public async getAllBrands(): Promise<Brand[]> {
+        this.logger.info(`getAllBrands: getting all brands accessibles`, {
+            context: ProductTransactionsRepository.name,
+        });
 
         return await this.connection.transaction(async transactionalEntityManage => {
             return await this.brandsService.getAllBrands();
-        })
-    }  
+        });
+    }
 
-    public async getAllProviders(): Promise<Provider[]>{
-        this.logger.info(
-            `getAllProviders: getting all brands accessibles`,
-            { context: ProductTransactionsRepository.name }
-        );
+    public async getAllProviders(): Promise<Provider[]> {
+        this.logger.info(`getAllProviders: getting all brands accessibles`, {
+            context: ProductTransactionsRepository.name,
+        });
 
         return await this.connection.transaction(async transactionalEntityManage => {
             return await this.providersService.getAllProviders();
-        })
+        });
     }
 
-    public async getAllCategorys(): Promise<Category[]>{
-        this.logger.info(
-            `getAllCategorys: getting all categorys accessibles`,
-            { context: ProductTransactionsRepository.name }
-        );
+    public async getAllCategorys(): Promise<Category[]> {
+        this.logger.info(`getAllCategorys: getting all categorys accessibles`, {
+            context: ProductTransactionsRepository.name,
+        });
 
         return await this.connection.transaction(async transactionalEntityManage => {
-            return await this.categoriesService.getAllCategorys();
-        })
-
+            return await this.categoriesService.getAllCategories();
+        });
     }
 
-    public async getAllProducts(): Promise<Product[]>{
-        this.logger.info(
-            `getAllProducts: getting all products accessibles`,
-            { context: ProductTransactionsRepository.name }
-        );
+    public async getAllProducts(): Promise<Product[]> {
+        this.logger.info(`getAllProducts: getting all products accessibles`, {
+            context: ProductTransactionsRepository.name,
+        });
 
-         return await this.connection.transaction(async transactionalEntityManage => {
+        return await this.connection.transaction(async transactionalEntityManage => {
             return await this.productsService.getAllProducts();
-        })
+        });
     }
 
-    public async deleteMulyiplesProducts( productsID : number[] ): Promise<string> {
-        this.logger.info(`deleteMulyiplesProducts: starting delete of products with ids : productsID=${ productsID}]`,
-            { context: ProductTransactionsRepository.name });
+    public async deleteMulyiplesProducts(productsID: number[]): Promise<string> {
+        this.logger.info(
+            `deleteMulyiplesProducts: starting delete of products with ids : productsID=${productsID}]`,
+            { context: ProductTransactionsRepository.name },
+        );
 
         return await this.connection.transaction(async transactionalEntityManage => {
             return await this.productsService.deletMultiplesProducts(productsID);
-        })
+        });
     }
 
-    public async createProduct(product:ProductsAO): Promise<Product>{
-         this.logger.info(`createProduct: creating the product: product=${JSON.stringify(product)}]`,
-            { context: ProductTransactionsRepository.name });
+    public async saveProductImage(imageName: string, productId: number): Promise<string> {
+        this.logger.info(`createProduct: creating the product: product=${JSON.stringify(productId)}]`, {
+            context: ProductTransactionsRepository.name,
+        });
 
         return await this.connection.transaction(async transactionalEntityManage => {
-            return await this.productsService.createProduct(product);
-        })
+            return await this.productsService.saveProductImage(imageName, productId);
+        });
     }
 
-    public async saveProductImage(imageName:string, productId:number): Promise<string>{
-         this.logger.info(`createProduct: creating the product: product=${JSON.stringify(productId)}]`,
-            { context: ProductTransactionsRepository.name });
+    public async saveProductDimension(dimension: dimensionDto, productId): Promise<any> {
+        this.logger.info(`createProduct: creating the product: product=${JSON.stringify(productId)}]`, {
+            context: ProductTransactionsRepository.name,
+        });
 
         return await this.connection.transaction(async transactionalEntityManage => {
-            return await this.productsService.saveProductImage(imageName,productId);
-        })
+            return await this.productsService.createDimension(
+                dimension.width,
+                dimension.height,
+                dimension.long,
+                productId,
+            );
+        });
     }
 
-    public async saveProductDimension(dimension:dimensionDto, productId): Promise<any>{
-         this.logger.info(`createProduct: creating the product: product=${JSON.stringify(productId)}]`,
-            { context: ProductTransactionsRepository.name });
+    public async getCatalogues(): Promise<Catalogue[]> {
+        this.logger.info(`getCatalogues: getting all Catalogues accessibles`, {
+            context: ProductTransactionsRepository.name,
+        });
 
         return await this.connection.transaction(async transactionalEntityManage => {
-            return await this.productsService.createDimension(dimension.width, dimension.height, dimension.long
-                ,productId);
-        })
-    }
-
-    public async getCatalogues(): Promise<Catalogue[]>{
-        this.logger.info(
-            `getCatalogues: getting all Catalogues accessibles`,
-            { context: ProductTransactionsRepository.name }
-        );
-
-         return await this.connection.transaction(async transactionalEntityManage => {
             return await this.cataloguesService.getCatalogues();
-        })
+        });
     }
 
-    public async catalogueSaveControl(catalogueData: categoryDto): Promise<any>{
-        this.logger.info(
-            `catalogueSaveControl:`,
-            { context: ProductTransactionsRepository.name }
-        );
+    public async catalogueSaveControl(catalogueData: categoryDto): Promise<any> {
+        this.logger.info(`catalogueSaveControl:`, {
+            context: ProductTransactionsRepository.name,
+        });
 
-         return await this.connection.transaction(async transactionalEntityManage => {
-            let productObj :Product= await this.productsService.findProduct(catalogueData.product.id);
-            let categoryObj : Category= await this.categoriesService.findCategory(catalogueData.category.id);
-            return await this.cataloguesService.asocciateProductCatalogue(catalogueData.id,productObj,categoryObj);
-        })
-
+        return await this.connection.transaction(async transactionalEntityManage => {
+            let productObj: Product = await this.productsService.findProduct(catalogueData.product.id);
+            return await this.categoriesService.findCategory(catalogueData.category.id);
+        });
     }
 
-    public async saveInventary(data: InventoryProductDto): Promise<any>{
-         this.logger.info(
-            `catalogueSaveControl:`,
-            { context: ProductTransactionsRepository.name }
-        );
+    public async saveInventary(data: InventoryProductDto): Promise<any> {
+        this.logger.info(`catalogueSaveControl:`, {
+            context: ProductTransactionsRepository.name,
+        });
 
-         return await this.connection.transaction(async transactionalEntityManage => {           
+        return await this.connection.transaction(async transactionalEntityManage => {
             return await this.productsService.saveInventory(data.quantity, data.product.id);
-        })
+        });
     }
 
-    public async updateInventory(data: InventoryProductDto) :Promise<any>{
-        this.logger.info(
-            `catalogueSaveControl:`,
-            { context: ProductTransactionsRepository.name }
+    public async updateInventory(data: InventoryProductDto): Promise<any> {
+        this.logger.info(`catalogueSaveControl:`, {
+            context: ProductTransactionsRepository.name,
+        });
+
+        return await this.connection.transaction(async transactionalEntityManage => {
+            return await this.productsService.updateInventory(data.quantity, data.product.id);
+        });
+    }
+
+    public async assingOfferToProduct(offerToProduct: OfferAssignProductDto): Promise<boolean> {
+        this.logger.debug(
+            `assingOfferToProduct: starting process to assign a parcitular offer to a product`,
+            {
+                context: ProductTransactionsRepository.name,
+            },
         );
 
-         return await this.connection.transaction(async transactionalEntityManage => {           
-            return await this.productsService.updateInventory(data.quantity, data.product.id);
-        })
+        return await this.connection.transaction(async transactionalEntityManager => {
+            return await this.productsService.assignOffer(
+                offerToProduct.product.id,
+                offerToProduct.offer.id,
+                transactionalEntityManager,
+            );
+        });
+    }
+
+    public async deleteOfferToProduct(productId: number): Promise<boolean> {
+        this.logger.debug(`deleteOfferToProducts: starting process to delete offer form product`, {
+            context: ProductTransactionsRepository.name,
+        });
+
+        return await this.connection.transaction(async transactionalEntityManager => {
+            return await this.productsService.deleteOffer(productId, transactionalEntityManager);
+        });
     }
 }

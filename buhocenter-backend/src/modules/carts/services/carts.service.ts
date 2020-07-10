@@ -1,203 +1,152 @@
-import { createQueryBuilder, Repository, UpdateResult, EntityManager} from 'typeorm';
-import { Injectable, Inject} from '@nestjs/common';
+import { createQueryBuilder, Repository, UpdateResult, EntityManager, getManager } from 'typeorm';
+import { Injectable, Inject, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Product } from '../../products/entities/product.entity';
 import { Cart } from '../entities/cart.entity';
-import { ProductCart } from '../entities/product-cart.entity';
-import { Customer } from '../../users/entities/customer.entity';
+import { User } from '../../users/entities/user.entity';
 import { CartProductDTO } from '../dto/cartProduct.dto';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { Logger } from 'winston';
 import { STATUS } from '../../../config/constants';
 import { ProductsService } from '../../products/services/products.service';
-import { UsersService } from '../../users/services/Users.service';
+import { UsersService } from '../../users/services/users.service';
 import { StatusService } from '../../status/services/status.service';
-import { CartServiceDTO } from '../dto/cartService.dto';
-import { ServiceCart } from '../entities/service-cart.entity';
-import { ServicesService } from '../../services/services/services.service';
-import { Service } from '../../services/entities/service.entity';
-import { Status } from '../../Status/entities/status.entity';
+import { Offer } from '../../products/entities/offer.entity';
+import { Status } from '../../status/entities/status.entity';
+import { ProductInventoriesService } from 'src/modules/products/services/product-inventories.service';
 
 @Injectable()
 export class CartsService {
     constructor(
-        @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger,
+        @Inject(WINSTON_MODULE_PROVIDER) private readonly _logger: Logger,
         @InjectRepository(Cart)
-        private readonly cartRepository: Repository<Cart>,
-        @InjectRepository(ProductCart)
-        private readonly productCartRepository: Repository<ProductCart>,
-        @InjectRepository(ServiceCart)
-        private serviceCartRepository: Repository<ServiceCart>,
-        @Inject(ProductsService)
+        private readonly _cartRepository: Repository<Cart>,
         private readonly ProductsService: ProductsService,
-        @Inject(UsersService)
         private readonly UsersService: UsersService,
-        @Inject(StatusService)
-        private readonly StatusService: StatusService,
-        @Inject(ServicesService)
-        private readonly ServicesService: ServicesService,
+        private readonly _productInventoryService: ProductInventoriesService,
+        private readonly _statusService: StatusService,
     ) {}
 
     /**
      * Update the given cart with the status
      * @param cartId cart id to update
      * @param statusId status id which will be set to the provided cart
-     * @param transactionalEntityManager transactional entity manager
      */
-    public async updateCartStatus(
-        cartId: number, statusId: number, transactionalEntityManager: EntityManager,
-    ): Promise<UpdateResult> {
-        this.logger.debug(`updateCartStatus: updating cart status [cartId=${cartId}|statusId=${statusId}]`,
-            { context: CartsService.name });
-
-        const cartTransactionRepository: Repository<Cart> = transactionalEntityManager.getRepository(
-            Cart,
-        );
-        
-        return cartTransactionRepository.update({ id: cartId }, { status: { id: statusId }});
-    }
-
-    public async findCartUser(customerId: number): Promise<Cart> {
-        this.logger.debug(`findCartUser: [customerId = ${customerId}]`, { context: CartsService.name });
-        let thisCustomer = await this.UsersService.findUser(customerId);
-        let active = await this.StatusService.getStatus(STATUS.ACTIVE.id);
-        return await this.cartRepository.findOne({
-            where:{customer:thisCustomer, status:active}
+    public async updateCartStatus(cartId: number, statusId: number): Promise<UpdateResult> {
+        this._logger.debug(`updateCartStatus: updating cart status [cartId=${cartId}|statusId=${statusId}]`, {
+            context: CartsService.name,
         });
-    }
 
-	private async createCart(findCustomer: Customer): Promise<Cart> {
-        await this.logger.debug(`createCart: creando cart [findCustomer=${JSON.stringify(findCustomer)}`,
-            { context: CartsService.name });
-        const active = await this.StatusService.getStatus(STATUS.ACTIVE.id);
-        const newCart = new Cart();
-        newCart.customer = findCustomer;
-        newCart.status = active;
-        await this.cartRepository.save(newCart);
-        await this.logger.debug(`createCart: cart creado [findCustomer = ${JSON.stringify(findCustomer)}`,
-            { context: CartsService.name });
-        return newCart;
-	}
-
-    private async createProductCart(cart: Cart, product: Product, quantity: number) {
-        const newProductCart: ProductCart = new ProductCart();
-        newProductCart.quantity = quantity;
-        newProductCart.cart = cart;
-        newProductCart.product = product;
-        await this.productCartRepository.save(newProductCart);
-        this.logger.debug(`createProductCart: relacion product cart guardada([cart = ${JSON.stringify(cart)}|product = ${JSON.stringify(product)}|quantity = ${quantity}])`,
-            { context: CartsService.name });
+        return this._cartRepository.update({ id: cartId }, { status: { id: statusId } });
     }
 
     /**
-    * Associate a product and a cart
-    * @params ProductRes, contains the details of the product wich will be associate to the customer cart
-    * @returns Promise<Cart>
-    */
-    public async asociateProductCart(ProductRes: CartProductDTO): Promise<Cart> {
-        this.logger.debug(`asociateProductCart: associating product and cart [productRes=${JSON.stringify(ProductRes)}]`,
-            { context: CartsService.name });
+     * Finds the products inside the users Carts
+     * @param serId cart id to update
+     * @return Promise<Carts[]>
+     */
+    public async findCartUser(userId: number): Promise<Cart[]> {
+        this._logger.debug(`findCartUser: [UserId = ${userId}]`, {
+            context: CartsService.name,
+        });
 
-        const findCustomer: Customer = await this.UsersService.findUser(ProductRes.customer.id);
-        const findProduct: Product = await this.ProductsService.findProduct(ProductRes.product.id);
-        const findCartNewest: Cart = await this.findCartUser(ProductRes.customer.id);
+        const thisUser = await this.UsersService.getUserById(userId);
 
-        if (findCartNewest) {
-            this.logger.debug(`asociateProductCart: cart found!`, { context: CartsService.name });
-            await this.createProductCart(findCartNewest, findProduct, ProductRes.quantity);
-            return findCartNewest;
-        } else {
-            this.logger.debug(`asociateProductCart: no carts found!`, { context: CartsService.name });
-            const newCart: Cart = await this.createCart(findCustomer);
-            await this.createProductCart(newCart, findProduct, ProductRes.quantity);
-            return newCart;
-        }
-   }
+        const active = await this._statusService.getStatusById(STATUS.ACTIVE.id);
 
-    private async createServiceCart(CustomerCart: Cart, Service, quantity: number) {
-        const newServiceCart: ServiceCart = new ServiceCart();
-        newServiceCart.quantity = quantity;
-        newServiceCart.cart = CustomerCart;
-        newServiceCart.service = Service;
-        await this.serviceCartRepository.save(newServiceCart);
+        return await this._cartRepository.find({
+            where: { User: thisUser, status: active },
+        });
     }
 
-    async asociateServiceCart(ServiceRes: CartServiceDTO): Promise<string> {
-        this.logger.debug(`asociateServiceCart: [serviceRes=${JSON.stringify(ServiceRes)}]`,
-            {context: CartsService.name});
+    /**
+     * Associate a product and a cart by finding the products and User,and save it in the DB.
+     * @params ProductRes, contains the details of the product wich will be associate to the User cart
+     * @returns Promise<string>
+     */
+    public async asociateProductCart(ProductRes: CartProductDTO): Promise<string> {
+        this._logger.debug(
+            `asociateProductCart: saving product in costumer cart [productRes=${JSON.stringify(ProductRes)}]`,
+            { context: CartsService.name },
+        );
+        try {
+            const user: User = await this.UsersService.getUserById(ProductRes.user.id);
+            const findProduct: Product = await this.ProductsService.findProduct(ProductRes.product.id);
 
-        const findCustomer: Customer = await this.UsersService.findUser(ServiceRes.customer.id);
-        const findService: Service = await this.ServicesService.findService(ServiceRes.service.id);
-        const findCartNewest: Cart = await this.findCartUser(ServiceRes.customer.id);
+            const newProductCart: Cart = new Cart();
+            const active = await this._statusService.getStatusById(STATUS.ACTIVE.id);
+            const productQuantity: number = parseInt(ProductRes.quantity);
+            newProductCart.quantity = productQuantity;
+            newProductCart.productPrice = findProduct.price;
+            newProductCart.user = user;
+            newProductCart.status = active;
+            newProductCart.product = findProduct;
+            const productOffer: Offer = await this.ProductsService.findOffer(findProduct.offer);
+            if (Offer) {
+                newProductCart.productPrice =
+                    newProductCart.productPrice -
+                    (newProductCart.productPrice * productOffer.percentage) / 100;
 
-        if (findCartNewest) {
-            await this.createServiceCart(findCartNewest, findService, ServiceRes.quantity);
-        } else {
-            const newCart: Cart = await this.createCart(findCustomer);
-            await this.createServiceCart(newCart, findService,
-                ServiceRes.quantity);
+                newProductCart.offerPrice = productOffer.percentage;
+            } else {
+                newProductCart.offerPrice = 0;
+            }
+            await this._cartRepository.save(newProductCart);
+            this._logger.debug(`createProductCart: product associate to users cart`, {
+                context: CartsService.name,
+            });
+
+            return 'product associated succesfully';
+        } catch (e) {
+            this._logger.error(
+                `createProductCart: error when trying to product associate to users cart([error= ${JSON.stringify(
+                    e.message,
+                )}])`,
+                { context: CartsService.name },
+            );
+            throw new BadRequestException('Error saving product in the users cart');
         }
-
-        this.logger.debug(`asociateServiceCart: [serviceRes=${JSON.stringify(ServiceRes)}]`,
-            {context: CartsService.name});
-
-        return 'Service added to cart successfully!';
     }
 
     /**
      * Returns the products with its saved items
-     * @param customerId current logged in customer id
+     * @param userId current logged in User id
+     * @return Promise<Cart[]>
      */
-    async findCartProduct(customerId: number): Promise<any> {
-        this.logger.debug(`findCartProduct: [customerId=${customerId}]`, { context: CartsService.name });
-
-        const cart = await this.cartRepository.findOne({
-            where: `customer_id = ${customerId}`,
-            relations: [
-                'productCarts',
-                'productCarts.checkout',
-                'productCarts.product',
-                'productCarts.product.status',
-                'productCarts.product.photos',
-                'productCarts.product.productProvider',
-                'productCarts.product.productProvider.provider',
-                'productCarts.product.offers',
-                'productCarts.product.offers.offer',
-            ],
+    async findCartProduct(userId: number): Promise<Cart[]> {
+        this._logger.debug(`findCartProduct: [userId=${userId}]`, {
+            context: CartsService.name,
         });
-        cart.productCarts = await this.cleanStatusOfferProducts(cart.productCarts);
-        cart.productCarts = cart.productCarts.filter((i) => 
-            !i.checkout && i.product && i.product.status && i.product.status.id !== STATUS.INACTIVE.id
-        );
+
+        let cart: Cart[] = await this._cartRepository
+            .createQueryBuilder('cart')
+            .innerJoinAndSelect('cart.status', 'status')
+            .innerJoinAndSelect('cart.product', 'product')
+            .innerJoinAndSelect('product.brand', 'brand')
+            .innerJoinAndSelect('product.provider', 'provider')
+            .innerJoinAndSelect('product.productPhotos', 'productPhotos')
+            .innerJoinAndSelect('product.productDimension', 'productDimension')
+            .innerJoinAndSelect('product.productInventory', 'productInventory')
+            .leftJoinAndSelect('product.offer', 'offer')
+            .where('cart.user = :userId', { userId: userId })
+            .andWhere('cart.status = :statusId', { statusId: STATUS.ACTIVE.id })
+            .getMany();
+
         return cart;
     }
 
-    /**
-     * 
-     * @param cartId 
-     * @param productId 
-     * @param checkoutId 
-     * @param transactionalEntityManager 
-     */
-    async updateProductCartCheckout(cartId: number, productId: number, checkoutId: number, transactionalEntityManager: EntityManager): Promise<UpdateResult> {
-        this.logger.debug(`updateProductCartCheckout: [cartId=${cartId}|productId=${productId}|checkoutId=${checkoutId}]`, { context: CartsService.name });
-
-        const productCartTransactionRepository: Repository<ProductCart> = transactionalEntityManager.getRepository(
-            ProductCart,
-        );
-
-        return productCartTransactionRepository.query(
-            `UPDATE cart_product SET checkout_id = ${checkoutId} WHERE cart_id = ${cartId} AND product_id = ${productId}`
-        );
+    async dropProductCart(productCartId: number): Promise<boolean> {
+        this._logger.debug(`deleteProductCart: deleting productCart by id [id=${productCartId}]`, {
+            context: CartsService.name,
+        });
+        const productCartResponse = await this._cartRepository.delete(productCartId);
+        return !!productCartResponse;
     }
 
-    /**
-     * This method sets new property on productCart items to notify
-     * which one has an offer available
-     * @param productsCart productCarts items
-     */
     cleanStatusOfferProducts(productsCart: any): any {
-        this.logger.debug(`cleanStatusOfferProducts: [productsCart=${JSON.stringify(productsCart)}]`, { context: ServiceCart.name });
+        this._logger.debug(`cleanStatusOfferProducts: [productsCart=${JSON.stringify(productsCart)}]`, {
+            context: CartsService.name,
+        });
 
         const cleanProductsCartOffer: any[] = [];
         productsCart.map((productCart, index) => {
@@ -217,10 +166,108 @@ export class CartsService {
         return cleanProductsCartOffer;
     }
 
-    async dropProductCart(productCartId: number): Promise<boolean> {
-        this.logger.debug(`deleteProductCart: deleting productCart by id [id=${productCartId}]`, { context: ServiceCart.name });
-        const productCartResponse = await this.productCartRepository.delete(productCartId);
-        return !!productCartResponse;
+    /**
+     * reserveCarts
+     * @param carts: Carts[]
+     * @param transactionEntityManager: EntityManager
+     * @returns void
+     */
+    async reserveCarts(carts: Cart[], transactionEntityManager: EntityManager) {
+        this._logger.debug(`reserveCarts: Reserving a set of carts due a new payment`, {
+            context: CartsService.name,
+        });
+
+        const reservedStatus = await this._statusService.getStatusById(STATUS.RESERVED.id);
+
+        carts.forEach(cart => {
+            cart.status = reservedStatus;
+        });
+
+        for await (const cart of carts) {
+            const productInventory = await this._productInventoryService.getProductInventoryByCartId(cart.id);
+            await this._productInventoryService.updateProductInventoryQuantity(
+                productInventory,
+                cart.quantity,
+                transactionEntityManager,
+            );
+        }
+
+        const cartTransactionRepository: Repository<Cart> = transactionEntityManager.getRepository(Cart);
+        await cartTransactionRepository.save(carts);
     }
 
+    /**
+     * giveBackCarts
+     * @param carts: Carts[]
+     * @returns void
+     */
+    async giveBackCarts(carts: Cart[]) {
+        this._logger.debug(`giveBackCarts: give back a set of carts due a invalid payment`, {
+            context: CartsService.name,
+        });
+
+        const activeStatus = await this._statusService.getStatusById(STATUS.ACTIVE.id);
+
+        carts.forEach(cart => {
+            cart.status = activeStatus;
+        });
+
+        await getManager().transaction(async transactionEntityManager => {
+            try {
+                for await (const cart of carts) {
+                    const productInventory = await this._productInventoryService.getProductInventoryByCartId(
+                        cart.id,
+                    );
+                    await this._productInventoryService.updateProductInventoryQuantity(
+                        productInventory,
+                        -cart.quantity,
+                        transactionEntityManager,
+                    );
+                }
+
+                const cartTransactionRepository: Repository<Cart> = transactionEntityManager.getRepository(
+                    Cart,
+                );
+                await cartTransactionRepository.save(carts);
+            } catch (error) {
+                throw error;
+            }
+        });
+    }
+
+    /**
+     * payCarts
+     * @param carts: Cart[]
+     * @param paidStatus: Status
+     * @returns void
+     */
+    async payCarts(carts: Cart[], paidStatus: Status) {
+        this._logger.debug(`payCarts: paying a set of carts due a paid payment`, {
+            context: CartsService.name,
+        });
+
+        carts.forEach(cart => {
+            cart.status = paidStatus;
+        });
+
+        await this._cartRepository.save(carts);
+    }
+
+    /**
+     * getPriceForCarts
+     * @param carts: Cart[]
+     * @returns number
+     */
+    getPriceForCarts(carts: Cart[]): number {
+        this._logger.debug(`getPriceForCarts: Getting a price for a set of carts`, {
+            context: CartsService.name,
+        });
+
+        let price = 0;
+        carts.forEach(cart => {
+            price += cart.quantity * cart.productPrice;
+        });
+
+        return price;
+    }
 }

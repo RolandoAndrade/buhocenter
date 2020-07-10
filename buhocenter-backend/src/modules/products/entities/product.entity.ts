@@ -1,67 +1,112 @@
 import { Entity, Column, ManyToOne, JoinColumn, OneToMany, OneToOne } from 'typeorm';
-import { BaseEntity } from '../../app/entities/base-entity';
+import { PrimalEntity } from '../../../app/entities/base-entity';
 import { Status } from '../../status/entities/status.entity';
-import { ProductProvider } from './product-provider.entity';
 import { Provider } from './provider.entity';
 import { Brand } from './brand.entity';
 import { ProductDimension } from './product-dimension.entity';
 import { ProductRating } from './product-rating.entity';
-import { productOffer } from './product-offer.entity';
-import { ProductCart } from '../../carts/entities/product-cart.entity';
 import { ProductInventory } from './product-inventory.entity';
 import { ProductPhoto } from './product-photo.entity';
 import { ProductQuestion } from './product-question.entity';
-import { ProductCategory } from './product-category.entity';
+import { ProductCatalogue } from './product-catalogue.entity';
+import { Offer } from './offer.entity';
+import { Cart } from '../../carts/entities/cart.entity';
 
-@Entity({ name: 'product' }) 
-export class Product extends BaseEntity {
-	@Column({ name: 'name', type: 'text', nullable: false })
-	name: string;
+@Entity({ name: 'products' })
+export class Product extends PrimalEntity {
+    @Column({ name: 'name', type: 'text', nullable: false })
+    name: string;
 
-	@Column({ name: 'description', type: 'text', nullable: false })
-	description: string;
+    @Column({ name: 'description', type: 'text', nullable: false })
+    description: string;
 
-	@Column({ name: 'price', type: 'decimal', nullable: false })
-	price: number;
+    @Column({ name: 'can_accumulate_points', type: 'boolean', nullable: true })
+    canAccumulatePoints: boolean;
 
-	@Column({ name: 'minimum_quantity_available', type: 'integer', nullable: true })
-	minimumQuantityAvailable: number;
+    @Column({ name: 'price', type: 'decimal', nullable: false })
+    price: number;
 
-	@Column({ name: 'shipping_price', type: 'decimal', nullable: false })
-	shippingPrice: number;	
+    @Column({ name: 'rating', type: 'decimal', nullable: false, default: 0 })
+    rating?: number;
 
-	@JoinColumn({ name: 'status_id' })
-	@ManyToOne(type => Status, status => status.products)
-	status: Status;
+    @Column({ name: 'fragile', type: 'boolean', nullable: false })
+    fragile: boolean;
 
-	@OneToMany(type => ProductProvider, productProvider => productProvider.product)
-	productProvider: ProductProvider;
+    @JoinColumn({ name: 'status_id' })
+    @ManyToOne(
+        type => Status,
+        status => status.products,
+        { nullable: false },
+    )
+    status: Status;
 
-	@JoinColumn({ name: 'brand_id' })
-	@ManyToOne(type => Brand , brand => brand.products)
-	brand: Brand;
+    @JoinColumn({ name: 'brand_id' })
+    @ManyToOne(
+        type => Brand,
+        brand => brand.products,
+        { nullable: false },
+    )
+    brand: Brand;
 
-	@OneToOne(type => ProductDimension, productDimensions => productDimensions.product)
-	productDimensions: ProductDimension;
+    @JoinColumn({ name: 'provider_id' })
+    @ManyToOne(
+        type => Provider,
+        provider => provider.products,
+        { nullable: false },
+    )
+    provider: Provider;
 
-	@OneToMany(type => ProductRating, productRatings => productRatings.product)
-	productRatings: ProductRating[];
+    @JoinColumn({ name: 'offer_id' })
+    @ManyToOne(
+        type => Offer,
+        offer => offer.products,
+        { nullable: true },
+    )
+    offer?: Offer;
 
-	@OneToMany(type => ProductCategory, productCategories => productCategories.product)
-	productCategories: ProductCategory[];
+    @OneToOne(
+        type => ProductDimension,
+        productDimension => productDimension.product,
+        { cascade: true },
+    )
+    productDimension: ProductDimension;
 
-	@OneToMany(type => productOffer, offers => offers.product)
-	offers: productOffer[];
+    @OneToOne(
+        type => ProductInventory,
+        productInventory => productInventory.product,
+        { cascade: true },
+    )
+    productInventory: ProductInventory;
 
-	@OneToMany(type => ProductCart, productCarts => productCarts.product)
-	productCarts: ProductCart[];
+    @OneToMany(
+        type => Cart,
+        carts => carts.product,
+    )
+    carts?: Cart[];
 
-	@OneToMany(type => ProductInventory, productInventories => productInventories.product)
-	productInventories: ProductInventory[];
+    @OneToMany(
+        type => ProductRating,
+        productRatings => productRatings.product,
+    )
+    productRatings?: ProductRating[];
 
-	@OneToMany(type => ProductPhoto, photos => photos.product)
-	photos: ProductPhoto[];
+    @OneToMany(
+        type => ProductCatalogue,
+        productCatalogues => productCatalogues.product,
+        { cascade: true },
+    )
+    productCatalogues: ProductCatalogue[];
 
-	@OneToMany(type => ProductQuestion, questions => questions.product)
-	questions: ProductQuestion[];
+    @OneToMany(
+        type => ProductPhoto,
+        productPhotos => productPhotos.product,
+        { cascade: true },
+    )
+    productPhotos: ProductPhoto[];
+
+    @OneToMany(
+        type => ProductQuestion,
+        productQuestions => productQuestions.product,
+    )
+    productQuestions?: ProductQuestion[];
 }

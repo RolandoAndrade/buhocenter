@@ -1,24 +1,24 @@
-import { Entity, Column, ManyToOne, JoinColumn, Check } from 'typeorm';
-import { BaseEntity } from '../../app/entities/base-entity';
+import { Entity, Column, JoinColumn, OneToOne } from 'typeorm';
+import { PrimalEntity } from '../../../app/entities/base-entity';
 import { Product } from './product.entity';
-import { Status } from '../../status/entities/status.entity';
-import { Checkout } from '../../payments/entities/checkout.entity';
 
-@Entity({ name: 'product_inventory' })
-export class ProductInventory extends BaseEntity {
-	
-	@Column({ name: 'quantity_disponible', type: 'integer', nullable: false })
-	availableQuantity: number;
+@Entity({ name: 'product_inventories' })
+export class ProductInventory extends PrimalEntity {
+    @Column({ name: 'quantity_available', type: 'integer', nullable: false })
+    availableQuantity: number;
 
-	@JoinColumn({ name: 'product_id' })
-	@ManyToOne(type => Product, product => product.productInventories)
-	product: Product;
+    @Column({
+        name: 'minimum_quantity_available',
+        type: 'integer',
+        nullable: true,
+    })
+    minimumAvailableQuantity: number;
 
-	@JoinColumn({ name: 'status_id' })
-	@ManyToOne(type => Status, status => status.productInventories, { nullable: true })
-	status: Status;	
-
-	@JoinColumn({ name: 'checkout_id' })
-	@ManyToOne(type => Checkout, checkout => checkout.productInventories, { nullable: true })
-	checkout: Checkout;	
+    @JoinColumn({ name: 'product_id' })
+    @OneToOne(
+        type => Product,
+        product => product.productInventory,
+        { nullable: false, onUpdate: 'CASCADE' },
+    )
+    product: Product;
 }

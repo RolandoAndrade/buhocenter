@@ -1,26 +1,24 @@
-import { Module } from "vuex";
-import { IS_LOADING } from './methods/loader.getters';
-import { SET_LOADING } from './methods/loader.mutations';
-import { SHOW_LOADER } from './methods/loader.actions';
+import { Module } from 'vuex';
+import LoaderTypes from '@/store/loader/methods/loader.methods';
+import { LOADER_EMPTY_STATE } from './loader.state';
+import { LoaderStateInterface } from './interfaces/loader.state.interface';
 
-const loader: Module<any, any> = {
+const loader: Module<LoaderStateInterface, any> = {
     namespaced: true,
-    state: {
-        loading: false,
-    },
+    state: LOADER_EMPTY_STATE,
     getters: {
-        [IS_LOADING](state): boolean {
+        [LoaderTypes.getters.IS_LOADING](state): boolean {
             return state.loading;
         },
     },
     mutations: {
-        [SET_LOADING](state, loading: boolean): void {
+        [LoaderTypes.mutations.SET_LOADING](state, loading: boolean): void {
             state.loading = loading;
         },
     },
     actions: {
-        [SHOW_LOADER]({ commit }, loading: boolean): void {
-            commit(SET_LOADING, loading);
+        [LoaderTypes.actions.SHOW_LOADER]({ commit }, loading: boolean): void {
+            commit(LoaderTypes.mutations.SET_LOADING, loading);
         },
     },
 };

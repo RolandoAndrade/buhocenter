@@ -1,40 +1,32 @@
 import { Module } from 'vuex';
-import {
-    FETCH_PROVIDERS
-} from './methods/providers.actions';
-import {
-    GET_PROVIDERS_SUCCESS
-} from './methods/providers.mutations';
-import {
-    GET_PROVIDERS
-} from './methods/providers.getters';
+import ProvidersHttpRepository from '@/modules/client/provider/repositories/providers.repository';
+import { PROVIDERS_EMPTY_STATE } from './providers.state';
+import { ProviderStateInterface } from './interfaces/providers.state.interface';
+import { Provider } from '@/modules/client/provider/interfaces/provider.interface';
+import ProvidersTypes from '@/store/providers/methods/providers.methods';
 
-import ProvidersHttpRepository from '@/modules/products/http-repositories/providers-http.repository';
-
-const Providers: Module<any, any> = {
+const Providers: Module<ProviderStateInterface, any> = {
     namespaced: true,
-    state: {
-        Providers: [],
-        err_Providers: false,
-    },
+    state: PROVIDERS_EMPTY_STATE,
     getters: {
-        [GET_PROVIDERS](state){
+        [ProvidersTypes.getters.GET_PROVIDERS](state) {
             return state.Providers;
         },
     },
     mutations: {
-        [GET_PROVIDERS_SUCCESS](state, data) {
+        [ProvidersTypes.mutations.GET_PROVIDERS_SUCCESS](state, providers: Provider[]) {
+            // eslint-disable-next-line
             // @ts-ignore
-            state.Providers = data;
+            state.Providers = providers;
         },
     },
     actions: {
-        async [FETCH_PROVIDERS]({ commit }): Promise <boolean | any>{  
-            try{          
-                const response = await ProvidersHttpRepository.getProviders();
-                commit(GET_PROVIDERS_SUCCESS, response);
-                return false;   
-            }catch(e){
+        async [ProvidersTypes.actions.FETCH_PROVIDERS]({ commit }): Promise<boolean> {
+            try {
+                const response: Provider[] = await ProvidersHttpRepository.getProviders();
+                commit(ProvidersTypes.mutations.GET_PROVIDERS_SUCCESS, response);
+                return false;
+            } catch (e) {
                 return true;
             }
         },

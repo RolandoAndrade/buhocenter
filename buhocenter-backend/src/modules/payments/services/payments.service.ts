@@ -1,251 +1,397 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, HttpStatus, BadRequestException } from '@nestjs/common';
 import { Logger } from 'winston';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
-import { EntityManager, Repository } from 'typeorm';
-import { PaymentGatewayRepository } from '../repositories/payment-gateway.repository';
-import { ProductsService } from '../../products/services/products.service';
-import { PlatformManagementService } from '../../platform-management/services/platform-management.service';
-import { CheckoutsService } from './checkouts.service';
-import { ITEM_TYPE, UTRUST_PAYMENT_STATUS, PLATFORM_PARAMETERS } from '../../../config/constants';
-import { Checkout } from '../entities/checkout.entity';
+import { IPaymentClient } from '../interfaces/payment-client';
+import { CoingatePaymentStrategy } from '../strategies/coingate-payment.strategy';
+import { ConfigService } from 'src/config/config.service';
+import { Checkout } from '../interfaces/checkout';
+import { NewPayment } from '../interfaces/new-payment';
+import { StatusService } from 'src/modules/status/services/status.service';
+import { STATUS, PAGINATE } from 'src/config/constants';
+import { CartsService } from 'src/modules/carts/services/carts.service';
 import { Payment } from '../entities/payment.entity';
-import { PaymentOrderDto } from '../dto/payments.dto';
-import { Product } from '../../products/entities/product.entity';
-import { StatusService } from '../../status/services/status.service';
-import { STATUS } from '../../../config/constants';
-import { Platform } from '../../platform-management/entities/platform.entity';
-import { StatusHistory } from '../../status/entities/status-history.entity';
-import { CartsService } from '../../carts/services/carts.service';
-import { Cart } from '../../carts/entities/cart.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, getManager, Brackets } from 'typeorm';
+import { CommissionsService } from './commissions.service';
+import { StatusHistory } from 'src/modules/status/entities/status-history.entity';
+import { NewOrder } from '../interfaces/new-order';
+import { OrderStatus } from '../interfaces/order-status';
+import { Status } from 'src/modules/status/entities/status.entity';
+import { CryptocurrenciesService } from './cryptocurrencies.service';
+import { ProductRatingsService } from 'src/modules/products/services/product-ratings.service';
+import { UsersService } from 'src/modules/users/services/users.service';
+import { CustomerLoyaltyService } from 'src/modules/third-party/services/customer-loyalty.service';
+import { CustomerLoyaltyTickets } from 'src/modules/third-party/interfaces/customer-loyalty-tickets';
+import { CustomerLoyaltyAccumulatePointsResponse } from 'src/modules/third-party/interfaces/customer-loyalty-accumulate-points';
+import { PaymentParameters } from '../interfaces/payment-parameters';
+import { PaginatedPayments } from '../interfaces/paginated-payments';
+import { Cart } from 'src/modules/carts/entities/cart.entity';
+import { User } from 'src/modules/users/entities/user.entity';
+import { SendPacketService } from '../../third-party/services/send-packet.service';
 
 @Injectable()
 export class PaymentsService {
-    constructor (
+    private paymentClient: IPaymentClient;
+
+    constructor(
         @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger,
-        private readonly paymentGatewayRepository: PaymentGatewayRepository,
-        private readonly productsService: ProductsService,
-        private readonly platformManagementService: PlatformManagementService,
-        private readonly checkoutsService: CheckoutsService,
+        @InjectRepository(Payment)
+        private readonly paymentRepository: Repository<Payment>,
+        private readonly cartService: CartsService,
+        private readonly commissionService: CommissionsService,
+        private readonly cryptocurrencyService: CryptocurrenciesService,
         private readonly statusService: StatusService,
-        private readonly cartsService: CartsService,
-    ) {}
-
-    public async createPayment(paymentOrder, transactionalEntityManager: EntityManager): Promise<Payment> {
-        this.logger.debug(`createPayment: creando el pago [checkoutId=${paymentOrder.resource.reference}]`,
-            { context: PaymentsService.name });
-        
-        const payment = {
-            total: parseFloat(paymentOrder.resource.amount),
-            checkout: {
-                id: parseInt(paymentOrder.resource.reference),
-            },
-        }
-
-        const paymentsTransactionRepository: Repository<Payment> = transactionalEntityManager.getRepository(
-            Payment,
-        );
-
-        return paymentsTransactionRepository.save(payment);
-    }
-
-    public async validateItemsAvailability(order, checkoutId: number, transactionalEntityManager: EntityManager): Promise<boolean> {
-
-        for await (const item of order.items) {
-            let itemAvailability: number;
-            let minInventoryAvailability: number;
-            
-            if (item.type.id === ITEM_TYPE.PRODUCT) {
-                minInventoryAvailability = 
-                    (await this.productsService.getMinimumProductAvailable(item.sku)).minimumQuantityAvailable;
-
-                itemAvailability = (await this.productsService.getProductInventoryAvailability(item.sku)).availableQuantity;
-
-                this.logger.debug(`validateItemsAvailability: [minInventoryAvailability=${
-                    minInventoryAvailability}|itemAvailability=${itemAvailability}]`, { context: PaymentsService.name });
-
-                if (order.cart) {
-                    await this.cartsService.updateProductCartCheckout(order.cart.id, item.sku, checkoutId, transactionalEntityManager);
-                } else {
-                    const productCart = {
-                        quantity: item.quantity,
-                        product: {
-                            id: item.sku,
-                        },
-                        customer: {
-                            id: order.customer.id,
-                        }
-                    }
-
-                    const cart: Cart = await this.cartsService.asociateProductCart(productCart);
-
-                    await this.cartsService.updateProductCartCheckout(cart.id, item.sku, checkoutId, transactionalEntityManager);
-                }
-
-                if ((minInventoryAvailability < itemAvailability) && (item.quantity < itemAvailability)) {
-                    await this.productsService.updateProductInventory(
-                        this.createProductInventoryEntity(itemAvailability - item.quantity, checkoutId, item.sku, STATUS.RESERVED.id),
-                        transactionalEntityManager,
-                    )
-                    delete item['type'];
-                } else {
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
-
-    private createProductInventoryEntity(availableQuantity: number, checkoutId: number, productId: number, statusId: number) {
-        return {
-            availableQuantity,
-            checkout: {
-                id: checkoutId,
-            },
-            product: {
-                id: productId
-            },
-            status: {
-                id: statusId,
-            }
-        }
+        private readonly productRatingService: ProductRatingsService,
+        private readonly usersService: UsersService,
+        private readonly customerLoyaltyService: CustomerLoyaltyService,
+        private readonly packageShippingService: SendPacketService,
+        private readonly configService: ConfigService,
+    ) {
+        this.paymentClient = new CoingatePaymentStrategy(this.configService);
     }
 
     /**
-     * Creates the order object to proceed with checkout process
-     * @param order 
-     * @param checkoutId 
+     * createOrder
+     * @param checkout: Checkout
+     * @returns Promise<NewPayment>
      */
-    private async createOrderObject(order, checkoutId: number) {
-        const checkout = {
-            id: checkoutId,
-            amount: order.amount,
-            line_items: order.items,
-            customer: order.customer,
+    async createOrder(checkout: Checkout): Promise<NewPayment> {
+        this.logger.debug(`createOrder: Creating a new order`, {
+            context: PaymentsService.name,
+        });
+
+        const price = this.cartService.getPriceForCarts(checkout.cartsForPayment);
+        const activeCommission = await this.commissionService.getActiveCommission();
+        const newOrderStatus = await this.statusService.getStatusById(STATUS.NEW.id);
+
+        const user: User = await this.usersService.getUserByAddress(checkout.address.id);
+
+        let payment: Payment = new Payment();
+
+        let packageShippingOrder;
+
+        this.logger.debug(`createOrder: Sending the order to Shipping System`, {
+            context: PaymentsService.name,
+        });
+        packageShippingOrder = await this.packageShippingService.createShippingOrder(user, checkout);
+        payment.trackingUrl = packageShippingOrder.tracking_URL;
+
+        let cartsWithPoints: Cart[] = checkout.cartsForPayment.filter(cart => cart.productPoints > 0);
+
+        if (user.loyaltySystemToken && cartsWithPoints.length > 0) {
+            let response: CustomerLoyaltyAccumulatePointsResponse;
+            this.logger.debug(`createOrder: Sending the order to Loyalty System`, {
+                context: PaymentsService.name,
+            });
+            try {
+                response = await this.customerLoyaltyService.accumulatePoints(
+                    cartsWithPoints,
+                    user.loyaltySystemToken,
+                );
+            } catch (error) {
+                throw new BadRequestException(error);
+            }
+
+            const ticket = response.confirmationTicket;
+
+            payment.loyaltySystemConfirmationId = ticket.confirmationId;
+            payment.loyaltySystemDate = ticket.date.toString();
+            payment.loyaltySystemAmount = ticket.pointsToDollars.toString();
+            payment.loyaltySystemCommission = ticket.commission.toString();
+            payment.loyaltySystemPoints = ticket.accumulatedPoints.toString();
+
+            payment.total = parseFloat(
+                (
+                    price +
+                    price * activeCommission.serviceFee +
+                    price * activeCommission.processorFee +
+                    ticket.commission / 100
+                ).toFixed(2),
+            );
+        } else {
+            payment.total = parseFloat(
+                (price + price * activeCommission.serviceFee + price * activeCommission.processorFee).toFixed(
+                    2,
+                ),
+            );
         }
 
-        const paymentCommission: Platform =
-            await this.platformManagementService.getPlatformParameterValue(PLATFORM_PARAMETERS.PAYMENT_COMMISSION.id);
-        const ecommerceServiceCommission: Platform =
-            await this.platformManagementService.getPlatformParameterValue(PLATFORM_PARAMETERS.ECOMMERCE_SERVICE_COMMISSION.id);
-        const tax: number = parseFloat(paymentCommission.content) +
-            (parseFloat(ecommerceServiceCommission.content) * parseFloat(checkout.amount.total) / 100);
-        
-        checkout.amount.total = `${parseFloat(checkout.amount.total) + tax}`;
-        checkout.amount.details.tax = `${tax}`;
-        
-        // console.log('checkout', checkout);
+        payment.address = checkout.address;
+        payment.commission = activeCommission;
+        payment.foreignExchange = checkout.foreignExchange;
+        payment.carts = checkout.cartsForPayment;
 
-        return checkout;
-    }
+        let statusHistory = new StatusHistory();
+        statusHistory.status = newOrderStatus;
+        payment.statusHistories = [statusHistory];
 
-    private createCheckoutEntity(order) {
-        let checkout: { currency: { id: number }; cart?: { id: number } } = {
-            currency: {
-                id: order.currency.id
+        let order: NewOrder;
+
+        await getManager().transaction(async transactionEntityManager => {
+            try {
+                await this.cartService.reserveCarts(checkout.cartsForPayment, transactionEntityManager);
+                const paymentTransactionRepository: Repository<Payment> = transactionEntityManager.getRepository(
+                    Payment,
+                );
+                await paymentTransactionRepository.save(payment);
+                this.logger.debug(`createOrder: Sending the order to payment gateway`, {
+                    context: PaymentsService.name,
+                });
+                order = await this.paymentClient.createOrder(payment.id, payment.total);
+                payment.transaction = order.id;
+                await paymentTransactionRepository.save(payment);
+            } catch (error) {
+                throw error;
             }
+        });
+
+        return {
+            payment: payment,
+            order: order,
+            packageOrder: packageShippingOrder,
         };
-
-        if (order.cart) {
-            checkout.cart = {
-                id: order.cart.id,
-            }
-        }
-
-        return checkout;
     }
 
-    private creatstatusHistoryEntity(checkoutId, statusId) {
-        return {
-            checkout: {
-                id: checkoutId
+    /**
+     * callbackOrders
+     * @param order: OrderStatus
+     * @returns Promise<OrderStatus>
+     */
+    async callbackOrders(order: OrderStatus): Promise<OrderStatus> {
+        this.logger.debug(`callbackOrders: Receiving the status of a payment [paymentId=${order.order_id}]`, {
+            context: PaymentsService.name,
+        });
+
+        const payment = await this.getPaymentById(parseInt(order.order_id));
+        const status = await this.statusService.getStatusByName(order.status);
+
+        try {
+            switch (order.status) {
+                case STATUS.PENDING.name:
+                    await this.setPaymentCryptocurrency(
+                        payment,
+                        parseFloat(order.pay_amount),
+                        order.pay_currency,
+                    );
+                    break;
+                case STATUS.PAID.name:
+                    await this.cartService.payCarts(payment.carts, status);
+                    break;
+                case STATUS.INVALID.name:
+                case STATUS.CANCELED.name:
+                case STATUS.EXPIRED.name:
+                    await this.cartService.giveBackCarts(payment.carts);
+                    break;
+            }
+        } catch (error) {
+            throw error;
+        } finally {
+            await this.updatePaymentStatus(payment, status);
+            return order;
+        }
+    }
+
+    /**
+     * getPaymentById
+     * @param paymentId: number
+     * @returns Promise<Payment>
+     */
+    async getPaymentById(paymentId: number): Promise<Payment> {
+        this.logger.debug(`getPaymentById: Getting a payment by id [paymentId=${paymentId}]`, {
+            context: PaymentsService.name,
+        });
+
+        return await this.paymentRepository
+            .createQueryBuilder('payment')
+            .innerJoinAndSelect('payment.carts', 'carts')
+            .innerJoinAndSelect('payment.statusHistories', 'statusHistories')
+            .where('payment.id = :paymentId', { paymentId: paymentId })
+            .getOne();
+    }
+
+    /**
+     * updatePaymentStatus
+     * @param payment: Payment
+     * @param status: Status
+     * @retuns void
+     */
+    async updatePaymentStatus(payment: Payment, status: Status) {
+        this.logger.debug(
+            `updatePaymentStatus: Updating de status of a payment [paymentId=${payment.id}|statusName=${status.name}]`,
+            {
+                context: PaymentsService.name,
             },
-            status: {
-                id: statusId
-            }
-        }
-    }
-
-    /**
-     * Creates the order to checkout, updates the status history of the order and checks if the products
-     * are available in inventory
-     * @param order entity which represents the order to checkout
-     * @param transactionalEntityManager 
-     */
-    public async createOrder(order, transactionalEntityManager: EntityManager): Promise<string> {
-        this.logger.debug(`createOrder: executing payment [order=${JSON.stringify(order)}]`, { context: PaymentsService.name });
-        
-        const checkout: Checkout =
-            await this.checkoutsService.createCheckout(this.createCheckoutEntity(order), transactionalEntityManager);
-
-        const canStartCheckout: boolean = await this.validateItemsAvailability(order, checkout.id, transactionalEntityManager);
-
-        if (!canStartCheckout) {
-            throw new Error('This product is not available.');
-        }
-
-        await this.statusService.creatstatusHistory(
-            this.creatstatusHistoryEntity(checkout.id, STATUS.TO_PROCESS.id), transactionalEntityManager
         );
-            
-        const orderObj = await this.createOrderObject(order, checkout.id);
-        const paymentOrder = await this.paymentGatewayRepository.createOrder(orderObj);
 
-        this.logger.debug(`paymentOrder [paymentOrder=${JSON.stringify(paymentOrder)}]`);
+        let statusHistory = new StatusHistory();
+        statusHistory.status = status;
+        payment.statusHistories.push(statusHistory);
 
-        await this.checkoutsService.
-            updateCheckoutWithTransactionIdByCheckoutId(checkout.id, paymentOrder.data.id, transactionalEntityManager);
-
-        return paymentOrder.data.attributes.redirect_url;
+        await this.paymentRepository.save(payment);
     }
 
     /**
-     * Updates the checkout created according to the payment gateway
-     * @param paymentOrder object sent by UTRUST notifying the payment status
-     * @param transactionalEntityManager transactional entity manager
+     * setPaymentCryptocurrency
+     * @param payment: Payment
+     * @param totalCryptocurrency: number
+     * @param cryptocurrencyIso: string
+     * @returns void
      */
-    public async updateOrder(paymentOrder: PaymentOrderDto, transactionalEntityManager: EntityManager): Promise<void> {
-        this.logger.debug(`updateOrder: modifying the order [order=${JSON.stringify(paymentOrder)}]`,
-            { context: PaymentsService.name });
+    async setPaymentCryptocurrency(payment: Payment, totalCryptocurrency: number, cryptocurrencyIso: string) {
+        this.logger.debug(
+            `setPaymentCryptocurrency: Setting cryptocurrency of a payment [paymentId=${payment.id}|cryptocurrencyIso=${cryptocurrencyIso}]`,
+            {
+                context: PaymentsService.name,
+            },
+        );
 
-        if (paymentOrder.event_type === UTRUST_PAYMENT_STATUS.CONFIRMED.text) {
-            this.logger.debug(`updateOrder: order approved! [eventType=${
-                paymentOrder.event_type}|orderId=${paymentOrder.resource.reference}]`, { context: PaymentsService.name });
+        const cryptocurrency = await this.cryptocurrencyService.getCryptotocurrencyByIso(cryptocurrencyIso);
+        payment.totalCryptocurrency = totalCryptocurrency;
+        payment.cryptocurrency = cryptocurrency;
 
-            this.logger.debug(`${paymentOrder.event_type} - ${paymentOrder.resource.reference}`);
-            
-            await this.createPayment(paymentOrder, transactionalEntityManager);
-            
-            const lastStatusHistory: StatusHistory = await this.statusService.getStatusHistoryByCheckoutIdAndStatusId(
-                parseInt(paymentOrder.resource.reference), STATUS.PROCESSED.id);
+        await this.paymentRepository.save(payment);
+    }
 
-            await this.productsService.updateProductInventoryWithCheckout(
-                parseInt(paymentOrder.resource.reference), STATUS.PROCESSED.id, transactionalEntityManager
-            );
+    /**
+     * getPayments
+     * @param parameters: PaymentParameters
+     * @returns Promise<Payment[] | PaginatedPayments>
+     */
+    async getPayments(parameters: PaymentParameters): Promise<Payment[] | PaginatedPayments> {
+        this.logger.debug(
+            `getPayments: Getting the payments [userId=${parameters.userId}|start=${parameters.start}|limit=${parameters.limit}]`,
+            {
+                context: PaymentsService.name,
+            },
+        );
 
-            if (!lastStatusHistory) {
-                await this.statusService.creatstatusHistory(
-                    this.creatstatusHistoryEntity(paymentOrder.resource.reference, STATUS.PROCESSED.id), transactionalEntityManager
-                );
-            }
-
-		} else {
-            this.logger.error(`updateOrder: order cancelled! [eventType=${
-                paymentOrder.event_type}|orderId=${paymentOrder.resource.reference}]`, { context: PaymentsService.name });
-            
-            const lastStatusHistory: StatusHistory = await this.statusService.getStatusHistoryByCheckoutIdAndStatusId(
-                parseInt(paymentOrder.resource.reference), STATUS.REJECTED.id);
-
-            if (!lastStatusHistory) {
-                await this.statusService.creatstatusHistory(
-                    this.creatstatusHistoryEntity(paymentOrder.resource.reference, STATUS.REJECTED.id), transactionalEntityManager
-                );
-            }
-            
-            await this.productsService.updateProductInventoryWithCheckout(
-                parseInt(paymentOrder.resource.reference), STATUS.REJECTED.id, transactionalEntityManager
-            );
-
+        if (parameters.userId) {
+            return await this.getPaymentsByUserId(parameters.userId);
+        } else {
+            parameters.start = parameters.start || PAGINATE.START;
+            parameters.limit = parameters.limit || PAGINATE.LIMIT;
+            return await this.getPaginatedPayments(parameters.start, parameters.limit);
         }
+    }
+
+    /**
+     * getPaymentsByUserId
+     * @param userId: number
+     * @returns Payment[]
+     */
+    async getPaymentsByUserId(userId: number): Promise<Payment[]> {
+        this.logger.debug(`getPaymentsByUserId: Getting the payments of a user [userId=${userId}]`, {
+            context: PaymentsService.name,
+        });
+
+        let query = this.paymentRepository
+            .createQueryBuilder('payment')
+            .innerJoinAndSelect('payment.address', 'address')
+            .innerJoinAndSelect('address.user', 'user')
+            .innerJoinAndSelect('payment.statusHistories', 'statusHistories')
+            .innerJoinAndSelect('statusHistories.status', 'status')
+            .innerJoinAndSelect('payment.commission', 'commission')
+            .innerJoinAndSelect('payment.foreignExchange', 'foreignExchange')
+            .leftJoinAndSelect('payment.cryptocurrency', 'cryptocurrency');
+
+        if (userId) {
+            query.where('status.id <> :statusCanceledId', { statusCanceledId: STATUS.CANCELED.id });
+            query.andWhere('status.id <> :statusExpiredId', { statusExpiredId: STATUS.EXPIRED.id });
+            query.andWhere('status.id <> :statusInvalidId', { statusInvalidId: STATUS.INVALID.id });
+            query.andWhere('user.id = :userId', { userId: userId });
+        }
+
+        return await query.getMany();
+    }
+
+    /**
+     * getPaginatedPayments
+     * @param start: number
+     * @param limit: number
+     * @returns Promise
+     */
+    async getPaginatedPayments(start: number, limit: number): Promise<PaginatedPayments> {
+        this.logger.debug(
+            `getPaginatedPayments: Getting paginated payments [start=${start}|limit=${limit}]`,
+            {
+                context: PaymentsService.name,
+            },
+        );
+
+        start = start * limit - limit;
+
+        const paginatedProducts = await this.paymentRepository.findAndCount({
+            relations: [
+                'address',
+                'address.user',
+                'commission',
+                'statusHistories',
+                'statusHistories.status',
+                'foreignExchange',
+                'cryptocurrency',
+                'carts',
+                'carts.product',
+                'carts.product.productPhotos',
+                'carts.product.brand',
+                'carts.product.provider',
+            ],
+            skip: start,
+            take: limit,
+            order: {
+                id: 'ASC',
+            },
+        });
+
+        return {
+            payments: paginatedProducts[0],
+            paymentsNumber: paginatedProducts[1],
+        };
+    }
+
+    /**
+     * getPaymentsById
+     * @param paymentId: number
+     * @returns Paymen
+     */
+    async getPaymentsById(paymentId: number): Promise<Payment> {
+        this.logger.debug(`getPaymentsById: Getting a payment by its id [paymentId=${paymentId}]`, {
+            context: PaymentsService.name,
+        });
+
+        let payment = await this.paymentRepository.findOne({
+            relations: [
+                'address',
+                'address.user',
+                'commission',
+                'statusHistories',
+                'statusHistories.status',
+                'foreignExchange',
+                'cryptocurrency',
+                'carts',
+                'carts.product',
+                'carts.product.productPhotos',
+                'carts.product.brand',
+                'carts.product.provider',
+            ],
+            where: { id: paymentId },
+        });
+
+        const userId = payment.address.user.id;
+
+        const CartsNumber = Array.from({ length: payment.carts.length }, (array, index) => index);
+
+        for await (let index of CartsNumber) {
+            const productRating = await this.productRatingService.getProductRatingByUserIdAndProductId(
+                userId,
+                payment.carts[index].product.id,
+            );
+            if (productRating) {
+                payment.carts[index].product.productRatings = [productRating];
+            } else {
+                payment.carts[index].product.productRatings = [];
+            }
+        }
+
+        return payment;
     }
 }

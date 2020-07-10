@@ -1,65 +1,68 @@
-import { Controller, Inject, Get, Res, Param, ParseIntPipe, HttpStatus, Post, Body } from '@nestjs/common';
+import {
+    Controller,
+    Inject,
+    Get,
+    Res,
+    Param,
+    ParseIntPipe,
+    HttpStatus,
+    Post,
+    Body,
+    HttpCode,
+    Query,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { Logger } from 'winston';
-import { ProxyService } from '../services/proxy.service';
 import { PaymentsService } from '../services/payments.service';
-import { UTRUST_PAYMENT_STATUS } from '../../../config/constants';
-import { PaymentsTransactionsRepository } from '../transactions/payments.transactions.service';
-import { PaymentOrderDto } from '../dto/payments.dto';
-import { join } from 'path';
+import { NewPayment } from '../interfaces/new-payment';
+import { Checkout } from '../interfaces/checkout';
+import { OrderStatus } from '../interfaces/order-status';
+import { Payment } from '../entities/payment.entity';
+import { PaginatedPayments } from '../interfaces/paginated-payments';
+import { PaymentParameters } from '../interfaces/payment-parameters';
 
 @Controller('payments')
 export class PaymentsController {
+    constructor(
+        @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger,
+        private readonly paymentsService: PaymentsService,
+    ) {}
 
-    constructor (
-		@Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger,
-		private readonly paymentsService: PaymentsService,
-		private readonly paymentsTransactionRepository: PaymentsTransactionsRepository
-	) {}
+    @Post('/orders')
+    createOrder(@Body() checkout: Checkout): Promise<NewPayment> {
+        this.logger.info(`createOrder: Creating a new order`, {
+            context: PaymentsController.name,
+        });
 
-	// Se ejecuta una vez se haya realizado el pago por parte del cliente. Puede servir para manejar la lógica interna de la
-	// actualización de estatus de la orden
-	@Get('/return')
-	async returnPaymentOrder(
-		@Res() res: Response,
-		@Body() transactionBody
-	) {
-		this.logger.info(`returnPaymentOrder [transactionBody=${JSON.stringify(transactionBody)}]`, { context: PaymentsController.name });
-		res.sendFile(join(process.cwd(), '/src/templates/landing.html'));
-	}
+        return this.paymentsService.createOrder(checkout);
+    }
 
-	@Post('/update')
-	async updatePaymentOrder(
-		@Body() paymentOrder: PaymentOrderDto
-	) {
-		this.logger.info(`updatePaymentOrder [paymentOrder=${JSON.stringify(paymentOrder)}]`, { context: PaymentsController.name });
+    @HttpCode(200)
+    @Post('/orders/callback')
+    callbackOrders(@Body() order: OrderStatus): Promise<OrderStatus> {
+        this.logger.info(`callbackOrders: receiving the status of a payment`, {
+            context: PaymentsController.name,
+        });
 
-		return this.paymentsTransactionRepository.updateOrder(paymentOrder);
-	}
+        return this.paymentsService.callbackOrders(order);
+    }
 
-	@Get('/cancel')
-	async cancelPaymentOrder(
-		@Res() res: Response,
-		@Body() transactionBody
-	) {
-		this.logger.info(`cancelPaymentOrder [transactionBody=${JSON.stringify(transactionBody)}]`, { context: PaymentsController.name });
-		res.sendFile(join(process.cwd(), '/src/templates/landing.html'));
-	}
+    @Get()
+    getPayments(@Query() parameters: PaymentParameters): Promise<Payment[] | PaginatedPayments> {
+        this.logger.info('getPayments: Getting the payments', {
+            context: PaymentsController.name,
+        });
 
-	@Post()
-	async executePayment(
-		@Res() res: Response,
-		@Body() order
-	): Promise<Response> {
-		this.logger.info(`executePayment: ejecutando el pago [order=${JSON.stringify(order)}]`, { context: PaymentsController.name });
-		
-		try {
-			const paymentUrl: string = await this.paymentsTransactionRepository.createOrder(order);
-			return res.status(HttpStatus.OK).send({ redirectUrl: paymentUrl });
-		} catch(e) {
-			this.logger.error(`Error executing payment e=[${e}] ${JSON.stringify(e)}`);
-		}
-	}
+        return this.paymentsService.getPayments(parameters);
+    }
 
+    @Get(':id')
+    getPaymentsById(@Param('id', new ParseIntPipe()) id: number): Promise<Payment> {
+        this.logger.info('getPaymentsByUserI: Getting a payment by its id', {
+            context: PaymentsController.name,
+        });
+
+        return this.paymentsService.getPaymentsById(id);
+    }
 }

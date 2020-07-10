@@ -1,20 +1,26 @@
-import { Entity, Column, ManyToOne, JoinColumn, OneToOne } from 'typeorm';
-import { BaseEntity } from '../../app/entities/base-entity';
+import { Entity, Column, JoinColumn, OneToOne } from 'typeorm';
+import { PrimalEntity } from '../../../app/entities/base-entity';
 import { Product } from './product.entity';
 
-@Entity({ name: 'product_dimension' })
-export class ProductDimension extends BaseEntity {
-	
-	@Column({ name: 'width', type: 'varchar', length: 100, nullable: false })
-	width: string;
+@Entity({ name: 'product_dimensions' })
+export class ProductDimension extends PrimalEntity {
+    @Column({ name: 'width', type: 'numeric', nullable: false })
+    width: string;
 
-	@Column({ name: 'height', type: 'varchar', length: 100, nullable: false })
-	height: string;
+    @Column({ name: 'height', type: 'numeric', nullable: false })
+    height: string;
 
-	@Column({ name: 'long', type: 'varchar', length: 100, nullable: false })
-	long: string;
+    @Column({ name: 'long', type: 'numeric', nullable: false })
+    long: string;
 
-	@JoinColumn({ name: 'product_id' })
-	@OneToOne(type => Product, product => product.productDimensions)
-	product: Product;
+    @Column({ name: 'weight', type: 'numeric', nullable: false })
+    weight: string;
+
+    @JoinColumn({ name: 'product_id' })
+    @OneToOne(
+        type => Product,
+        product => product.productDimension,
+        { nullable: false, onUpdate: 'CASCADE' },
+    )
+    product: Product;
 }

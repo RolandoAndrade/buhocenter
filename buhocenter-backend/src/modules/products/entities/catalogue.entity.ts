@@ -1,23 +1,44 @@
-import { Entity, Column, OneToMany } from 'typeorm';
-import { BaseEntity } from '../../app/entities/base-entity';
-import { ServiceCatalogue } from '../../services/entities/service-catalogue.entity';
+import { Entity, Column, OneToMany, ManyToOne, JoinColumn } from 'typeorm';
+import { PrimalEntity } from '../../../app/entities/base-entity';
 import { ProductCatalogue } from './product-catalogue.entity';
+import { Category } from './category.entity';
+import { Status } from '../../status/entities/status.entity';
 
-@Entity('catalogue') 
-export class Catalogue extends BaseEntity {
-	
-	@Column({ name: 'name', type: 'varchar', length: 100, nullable: false })
-	name: string;
+@Entity({ name: 'catalogues' })
+export class Catalogue extends PrimalEntity {
+    @Column({ name: 'name', type: 'varchar', length: 100, nullable: false })
+    name: string;
 
-	@Column({name: 'description', type: 'varchar', length: 100, nullable: true })
-	description: string;
+    @Column({
+        name: 'description',
+        type: 'varchar',
+        length: 100,
+        nullable: true,
+    })
+    description: string;
 
-	@Column({name: 'term', type: 'varchar', length: 100, nullable: true })
-	term: string;
+    @Column({ name: 'term', type: 'varchar', length: 150, nullable: true })
+    term: string;
 
-	@OneToMany(type => ServiceCatalogue, serviceCatalogues => serviceCatalogues.catalogue)
-	serviceCatalogues: ServiceCatalogue[];
+    @JoinColumn({ name: 'category_id' })
+    @ManyToOne(
+        type => Category,
+        category => category.catalogues,
+        { nullable: false, onUpdate: 'CASCADE' },
+    )
+    category: Category;
 
-	@OneToMany(type => ProductCatalogue, productCatalogues => productCatalogues.catalogue)
-	productCatalogues: ProductCatalogue[];
+    @JoinColumn({ name: 'status_id' })
+    @ManyToOne(
+        type => Status,
+        status => status.catalogues,
+        { nullable: false, onUpdate: 'CASCADE' },
+    )
+    status: Status;
+
+    @OneToMany(
+        type => ProductCatalogue,
+        productCatalogues => productCatalogues.catalogue,
+    )
+    productCatalogues: ProductCatalogue[];
 }

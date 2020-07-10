@@ -1,42 +1,32 @@
 import { Module } from 'vuex';
-import {
-    FETCH_BRANDS
-} from './methods/brands.actions';
-import {
-    GET_BRANDS_SUCCESS
-} from './methods/brands.mutations';
-import {
-    GET_BRANDS
-} from './methods/brands.getters';
+import BrandsTypes from './methods/brands.methods';
+import BrandsHttpRepository from '@/modules/client/brand/brands.repository';
+import { BrandsStateInterface } from './interfaces/brands.state.interface';
+import { BRANDS_EMPTY_STATE } from './brands.state';
+import { BrandInterface } from '../../modules/client/brand/interfaces/brand.interface';
 
-import BrandsHttpRepository from '@/modules/products/http-repositories/brands-http.repository';
-
-const brands: Module<any, any> = {
+const brands: Module<BrandsStateInterface, any> = {
     namespaced: true,
-    state: {
-        brands: [],
-        err_brands: false,
-    },
+    state: BRANDS_EMPTY_STATE,
     getters: {
-        [GET_BRANDS](state){
+        [BrandsTypes.getters.GET_BRANDS](state) {
             return state.brands;
         },
     },
     mutations: {
-        [GET_BRANDS_SUCCESS](state, data) {
-            // @ts-ignore
+        [BrandsTypes.mutations.GET_BRANDS_SUCCESS](state, data: BrandInterface[]) {
             state.brands = data;
         },
     },
     actions: {
-        async [FETCH_BRANDS]({ commit }): Promise <boolean | any>{            
-            try{
-                const response = await BrandsHttpRepository.getBrands();
-                commit(GET_BRANDS_SUCCESS, response);
-                return false; 
-            }catch(e){
+        async [BrandsTypes.actions.FETCH_BRANDS]({ commit }): Promise<boolean> {
+            try {
+                const response: BrandInterface[] = await BrandsHttpRepository.getBrands();
+                commit(BrandsTypes.mutations.GET_BRANDS_SUCCESS, response);
+                return false;
+            } catch (e) {
                 return true;
-            }  
+            }
         },
     },
 };

@@ -1,44 +1,84 @@
 {
-  "name": "buhocenter-frontend",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "serve": "vue-cli-service serve",
-    "build": "vue-cli-service build",
-    "lint": "vue-cli-service lint"
-  },
-  "dependencies": {
-    "axios": "^0.19.2",
-    "bootstrap": "^4.4.1",
-    "core-js": "^3.6.4",
-    "firebase": "^7.14.2",
-    "react-bootstrap": "^1.0.1",
-    "vue": "^2.6.11",
-    "vue-class-component": "^7.2.3",
-    "vue-i18n": "^8.17.6",
-    "vue-property-decorator": "^8.4.1",
-    "vue-router": "^3.1.6",
-    "vuetify": "^2.2.11",
-    "vuex": "^3.1.3",
-    "vuex-class": "^0.3.2",
-    "vuex-persistedstate": "^3.0.1"
-  },
-  "devDependencies": {
-    "@vue/cli-plugin-babel": "~4.3.0",
-    "@vue/cli-plugin-router": "~4.3.0",
-    "@vue/cli-plugin-typescript": "~4.3.0",
-    "@vue/cli-plugin-vuex": "~4.3.0",
-    "@vue/cli-service": "~4.3.0",
-    "sass": "^1.19.0",
-    "sass-loader": "^8.0.0",
-    "typescript": "~3.8.3",
-    "vue-cli-plugin-vuetify": "~2.0.5",
-    "vue-template-compiler": "^2.6.11",
-    "vuetify-loader": "^1.3.0"
-  },
-  "browserslist": [
-    "> 1%",
-    "last 2 versions",
-    "not dead"
-  ]
+    "name": "buhocenter-frontend",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "serve": "npm run format && vue-cli-service serve",
+        "format": "prettier --write \"src/**/*.ts\" \"src/**/*.vue\"",
+        "build": "vue-cli-service build",
+        "build:dev": "npm version prepatch && npm run format && vue-cli-service build --mode development",
+        "build:prod": "vue-cli-service build --mode production",
+        "lint": "vue-cli-service lint",
+        "test": "jest --passWithNoTests"
+    },
+    "dependencies": {
+        "axios": "^0.19.2",
+        "bootstrap": "^4.5.0",
+        "core-js": "^3.6.5",
+        "firebase": "^7.15.0",
+        "moment": "^2.27.0",
+        "react-bootstrap": "^1.0.1",
+        "vue": "^2.6.11",
+        "vue-class-component": "^7.2.3",
+        "vue-easy-jwt": "^2.0.1",
+        "vue-i18n": "^8.18.2",
+        "vue-property-decorator": "^8.4.2",
+        "vue-router": "^3.3.2",
+        "vue-the-mask": "^0.11.1",
+        "vuetify": "^2.2.33",
+        "vuex": "^3.4.0",
+        "vuex-class": "^0.3.2",
+        "vuex-persistedstate": "^3.0.1"
+    },
+    "devDependencies": {
+        "@types/jest": "^25.1.2",
+        "jest": "^24.9.0",
+        "ts-jest": "^25.4.0",
+        "@typescript-eslint/eslint-plugin": "^3.2.0",
+        "@typescript-eslint/parser": "^3.2.0",
+        "@vue/cli-plugin-babel": "~4.4.1",
+        "@vue/cli-plugin-eslint": "^4.4.1",
+        "@vue/cli-plugin-router": "~4.4.1",
+        "@vue/cli-plugin-typescript": "~4.4.1",
+        "@vue/cli-plugin-vuex": "~4.4.1",
+        "@vue/cli-service": "~4.4.1",
+        "@vue/eslint-config-prettier": "^6.0.0",
+        "@vue/eslint-config-typescript": "^5.0.2",
+        "eslint": "^7.2.0",
+        "eslint-plugin-prettier": "^3.1.3",
+        "eslint-plugin-vue": "^6.2.2",
+        "prettier": "^2.0.5",
+        "sass": "^1.26.8",
+        "sass-loader": "^8.0.2",
+        "typescript": "~3.9.5",
+        "vue-cli-plugin-vuetify": "~2.0.5",
+        "vue-template-compiler": "^2.6.11",
+        "vuetify-loader": "^1.4.4"
+    },
+    "browserslist": [
+        "> 1%",
+        "last 2 versions",
+        "not dead"
+    ],
+    "jest": {
+        "moduleFileExtensions": [
+            "js",
+            "json",
+            "ts"
+        ],
+        "moduleNameMapper": {
+            "@/(.*)$": "<rootDir>/src/$1",
+            "^vue$": "vue/dist/vue.common.js"
+        },
+        "moduleDirectories": [
+            "node_modules",
+            "src"
+        ],
+        "testRegex": ".spec.ts$",
+        "transform": {
+            "^.+\\.(t|j)s$": "ts-jest"
+        },
+        "coverageDirectory": "../coverage",
+        "testEnvironment": "node"
+    }
 }

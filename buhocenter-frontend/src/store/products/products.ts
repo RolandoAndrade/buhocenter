@@ -1,271 +1,315 @@
 import { Module } from 'vuex';
-import {
-    FETCH_PRODUCTS,
-    FETCH_PRODUCT_PHOTO_BY_NAME,
-    SET_PRODUCT_PHOTOS_NOT_LOADED,
-    FETCH_PRODUCT_DETAIL,
-    FETCH_SERVICE_DETAIL,
-    FETCH_PRODUCT_PHOTOS,
-    FETCH_SERVICE_PHOTOS,
-    FETCH_PRODUCT_ITEM_PHOTOS,
-    FETCH_SERVICE_ITEM_PHOTOS,  
-    UPDATE_PRODUCT,
-    FETCH_ALL_PRODUCTS,
-    DELETE_PRODUCT,   
-    FETCH_PRODUCTS_DAILY_DETAIL,
-    FETCH_PRODUCTS_DAILY,
-    FETCH_PRODUCTS_DAILY_DETAIL_PHOTOS,
-    SET_PRODUCTS_DAILY_PHOTOS_NOT_LOADED,
-    CREATE_PRODUCT,
-    UPLOAD_IMAGE,
-    SAVE_PRODUCT_PHOTOS,
-    SAVE_PRODUCT_DIMENSION,
-    SAVE_INVENTORY_QUANTITY,
-    UPDATE_INVENTORY_QUANTITY
-} from './methods/products.actions';
-import {
-    SET_PRODUCTS,
-    SET_ITEM_DETAIL,
-    SET_PRODUCT_AND_PHOTOS_LOADED,
-    SET_TOTAL_PRODUCTS,
-    SET_PRODUCT_DAILY_AND_PHOTOS_LOADED,
-    SET_PRODUCTS_DAILY,
-} from './methods/products.mutations';
-import {
-    GET_PRODUCTS,
-    GET_PRODUCTS_AND_PHOTOS_LOADED,
-    GET_TOTAL_PRODUCTS,
-    GET_ITEM_DETAIL,
-    GET_PRODUCTS_DAILY,
-    GET_PRODUCTS_DAILY_AND_PHOTOS_LOADED,
-    GET_PRODUCT_INDEX_ID
-} from './methods/products.getters';
-import productsHttpRepository from '@/modules/products/http-repositories/products-http.repository';
-import servicesHttpRepository from '@/modules/products/http-repositories/services-http.repository';
-import productsFirebaseRepository from '@/modules/products/firebase-repositories/products-firebase.repository';
-import servicesFirebaseRepository from '@/modules/products/firebase-repositories/services-firebase.repository';
+import ProductsTypes from '@/store/products/methods/products.methods';
+import productsHttpRepository from '@/modules/client/products/repositories/products.repository';
+import servicesHttpRepository from '@/modules/client/services/repositories/services.repository';
+import productsFirebaseRepository from '@/modules/client/products/repositories/products.firebase';
+import servicesFirebaseRepository from '@/modules/client/services/repositories/services.firebase';
 import { ITEM_TYPE } from '@/config/constants';
-import { SUCESS, FETCHING, FETCHED } from '@/config/constants';
-import CategoryTypes from "@/store/category-module/methods/category-methods";
-import categoriesFirebaseRepository from "@/modules/products/firebase-repositories/categories-firebase.repository";
+import { PRODUCT_EMPTY_STATE } from './products.state';
+import { ProductStateInterface } from './interfaces/products.state.interface';
+import {
+    Product,
+    ProductPhotoDto,
+    dimensionDto,
+    ProductCreate,
+    ProductRatingCreate,
+    Products,
+    ProductFilters,
+} from '@/modules/client/products/interfaces/products.interface';
+import { Filter } from '@/utils/filter';
 
-const products: Module<any, any> = {
+const products: Module<ProductStateInterface, any> = {
     namespaced: true,
-    state: {
-        products: [],
-        productsAndPhotosLoaded: false,
-        productsDaily: [],
-        productsDailyAndPhotosLoaded: false,
-        totalProducts: 0,
-        itemDetail: {},
-    },
+    state: PRODUCT_EMPTY_STATE,
     getters: {
-        [GET_PRODUCTS](state) {
+        [ProductsTypes.getters.GET_PRODUCTS](state): Product[] {
             return state.products;
         },
-        [GET_PRODUCTS_AND_PHOTOS_LOADED](state) {
+        [ProductsTypes.getters.GET_ALL_PRODUCTS](state): Product[] {
+            return state.allProducts;
+        },
+        [ProductsTypes.getters.GET_PRODUCTS_AND_PHOTOS_LOADED](state): boolean {
             return state.productsAndPhotosLoaded;
         },
-        [GET_TOTAL_PRODUCTS](state) {
+        [ProductsTypes.getters.GET_TOTAL_PRODUCTS](state): number {
             return state.totalProducts;
         },
-        [GET_ITEM_DETAIL](state) {
+        [ProductsTypes.getters.GET_ITEM_DETAIL](state): Product {
             return state.itemDetail;
-        },        
-        [GET_PRODUCTS_DAILY](state) {
+        },
+        [ProductsTypes.getters.GET_PRODUCTS_DAILY](state): Product[] {
             return state.productsDaily;
         },
-        [GET_PRODUCTS_DAILY_AND_PHOTOS_LOADED](state) {
+        [ProductsTypes.getters.GET_PRODUCTS_DAILY_AND_PHOTOS_LOADED](state): boolean {
             return state.productsDailyAndPhotosLoaded;
         },
-        [GET_PRODUCT_INDEX_ID](state,index){
-            return state.products[0].id;
-        }
+        [ProductsTypes.getters.GET_PRODUCT_INDEX_ID](state): number {
+            return state.products[0].id!;
+        },
     },
     mutations: {
-        [SET_ITEM_DETAIL](state, item): void {
+        [ProductsTypes.mutations.SET_ITEM_DETAIL](state, item: Product): void {
             state.itemDetail = item;
         },
-        [SET_PRODUCTS](state, products): void {
+        [ProductsTypes.mutations.SET_PRODUCTS](state, products: Product[]): void {
             state.products = products;
         },
-        [SET_PRODUCT_AND_PHOTOS_LOADED](state, loaded: boolean): void {
+        [ProductsTypes.mutations.SET_ALL_PRODUCTS](state, products: Product[]): void {
+            state.allProducts = products;
+        },
+        [ProductsTypes.mutations.SET_PRODUCT_AND_PHOTOS_LOADED](state, loaded: boolean): void {
             state.productsAndPhotosLoaded = loaded;
         },
-        [SET_TOTAL_PRODUCTS](state, total: number): void {
+        [ProductsTypes.mutations.SET_TOTAL_PRODUCTS](state, total: number): void {
             state.totalProducts = total;
         },
-        [SET_PRODUCTS_DAILY](state, products): void {
+        [ProductsTypes.mutations.SET_PRODUCTS_DAILY](state, products: Product[]): void {
             state.productsDaily = products;
         },
-        [SET_PRODUCT_DAILY_AND_PHOTOS_LOADED](state, loaded: boolean): void {
+        [ProductsTypes.mutations.SET_PRODUCT_DAILY_AND_PHOTOS_LOADED](state, loaded: boolean): void {
             state.productsDailyAndPhotosLoaded = loaded;
         },
     },
     actions: {
-        async [FETCH_PRODUCT_DETAIL]({ commit }, productId: number): Promise<boolean> {
+        async [ProductsTypes.actions.FETCH_PRODUCT_DETAIL]({ commit }, productId: number): Promise<boolean> {
             try {
-                const itemDetail = await productsHttpRepository.getProductById(productId);
-                commit(SET_ITEM_DETAIL, itemDetail);
+                const itemDetail: Product = await productsHttpRepository.getProductById(productId);
+                commit(ProductsTypes.mutations.SET_ITEM_DETAIL, itemDetail);
                 return true;
             } catch (e) {
                 return false;
             }
         },
-        async [FETCH_SERVICE_DETAIL]({ commit }, productId: number): Promise<boolean> {
+        //eliminar
+        async [ProductsTypes.actions.FETCH_SERVICE_DETAIL]({ commit }, productId: number): Promise<boolean> {
             try {
                 const itemDetail = await servicesHttpRepository.getServiceById(productId);
-                commit(SET_ITEM_DETAIL, itemDetail);
+                commit(ProductsTypes.mutations.SET_ITEM_DETAIL, itemDetail);
                 return true;
             } catch (e) {
                 return false;
             }
         },
-        [SET_PRODUCT_PHOTOS_NOT_LOADED]({ commit }, loaded: boolean): void {
-            commit(SET_PRODUCT_AND_PHOTOS_LOADED, loaded);
+        [ProductsTypes.actions.SET_PRODUCT_PHOTOS_NOT_LOADED]({ commit }, loaded: boolean): void {
+            commit(ProductsTypes.mutations.SET_PRODUCT_AND_PHOTOS_LOADED, loaded);
         },
-        async [FETCH_PRODUCTS]({ commit }, { page, catalogueId }): Promise<boolean> {
+        async [ProductsTypes.actions.FETCH_PRODUCTS]({ commit }, data: ProductFilters): Promise<boolean> {
             try {
-                const products = await productsHttpRepository.getProducts(page, catalogueId);
-                commit(SET_PRODUCTS, products[0]);
-                commit(SET_TOTAL_PRODUCTS, products[1]);
+                const filter: Filter = new Filter(data);
+                const products: Products = await productsHttpRepository.getProducts(filter);
+                commit(ProductsTypes.mutations.SET_PRODUCTS, products.products);
+
+                //if ((data = {})) commit(ProductsTypes.mutations.SET_ALL_PRODUCTS, products.products);
+                commit(ProductsTypes.mutations.SET_TOTAL_PRODUCTS, products.productsNumber);
+
                 return true;
             } catch (e) {
                 return false;
             }
         },
-        async [FETCH_PRODUCT_ITEM_PHOTOS]({ commit }, { itemId, item }): Promise<boolean> {
+        async [ProductsTypes.actions.FETCH_PRODUCT_ITEM_PHOTOS](
+            { commit },
+            { itemId, item },
+        ): Promise<boolean> {
+            try {
+                for await (const element of item.productPhotos) {
+                    element.imageUrl = await productsFirebaseRepository.getProductPhotoByName(
+                        itemId,
+                        element.content,
+                    );
+                }
+                commit(ProductsTypes.mutations.SET_ITEM_DETAIL, item);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        },
+        // eliminar
+        async [ProductsTypes.actions.FETCH_SERVICE_ITEM_PHOTOS](
+            { commit },
+            { itemId, item },
+        ): Promise<boolean> {
             try {
                 for await (const element of item.photos) {
-                    element.imageUrl = await productsFirebaseRepository.getProductPhotoByName(itemId, element.content);
+                    element.imageUrl = await servicesFirebaseRepository.getServicePhotoByName(
+                        itemId,
+                        element.content,
+                    );
                 }
-                commit(SET_ITEM_DETAIL, item);
+                commit(ProductsTypes.mutations.SET_ITEM_DETAIL, item);
                 return true;
             } catch (e) {
                 return false;
             }
         },
-        async [FETCH_SERVICE_ITEM_PHOTOS]({ commit }, { itemId, item }): Promise<boolean> {
-            try {
-                for await (const element of item.photos) {
-                    element.imageUrl = await servicesFirebaseRepository.getServicePhotoByName(itemId, element.content);
-                }
-                commit(SET_ITEM_DETAIL, item);
-                return true;
-            } catch (e) {
-                return false;
-            }
-        },
-        async [FETCH_PRODUCT_PHOTO_BY_NAME]({ commit }, products): Promise<boolean | any> {
+        async [ProductsTypes.actions.FETCH_PRODUCT_PHOTO_BY_NAME](
+            { commit },
+            products: Product[],
+        ): Promise<boolean> {
             try {
                 for await (const element of products) {
                     element.type = ITEM_TYPE.PRODUCT;
-                    const principalPhoto: string = element.photos[0].content;
-                    const photo = await productsFirebaseRepository.getProductPhotoByName(element.id, principalPhoto);
-                    element.imageUrl = photo;
+                    const principalPhoto: string = element.productPhotos![0].content!;
+                    const photo = await productsFirebaseRepository.getProductPhotoByName(
+                        element.id!,
+                        principalPhoto,
+                    );
+                    element.imageUrl! = photo;
                 }
-                commit(SET_PRODUCTS, products);
-                commit(SET_PRODUCT_AND_PHOTOS_LOADED, true);
+                commit(ProductsTypes.mutations.SET_PRODUCTS, products);
+                commit(ProductsTypes.mutations.SET_PRODUCT_AND_PHOTOS_LOADED, true);
+                return true;
             } catch (e) {
                 return false;
             }
-        },    
-        async [UPDATE_PRODUCT] ({commit} ,product): Promise<boolean | any>{
-            try{   
-                const response = await productsHttpRepository.updateProductData(product);               
-                return true;
-            }catch(e){
+        },
+        async [ProductsTypes.actions.UPDATE_PRODUCT]({ commit }, product: ProductCreate): Promise<boolean> {
+            try {
+                delete product.photosFiles;
+                const productUpdated = await productsHttpRepository.updateProductData(product);
+                return productUpdated;
+            } catch (e) {
                 return false;
             }
         },
-        async [FETCH_ALL_PRODUCTS] ({commit}, product): Promise<boolean | any>{
-            try{
-                const products = await productsHttpRepository.getAllProducts();
-                commit(SET_PRODUCTS, products);   
-                return false;         
-            }catch(e){
+        async [ProductsTypes.actions.FETCH_ALL_PRODUCTS]({ commit }): Promise<boolean> {
+            try {
+                const products: Products = await productsHttpRepository.getAllProducts();
+                commit(ProductsTypes.mutations.SET_ALL_PRODUCTS, products);
+
                 return true;
-            }
-        },
-        async [DELETE_PRODUCT] ({commit}, id) : Promise<boolean>{
-            try{
-                const products = await productsHttpRepository.deleteProducts(id);                
-                return true;         
-            }catch(e){
+            } catch (e) {
                 return false;
             }
         },
-        async [FETCH_PRODUCTS_DAILY]({ commit }): Promise<boolean> {
+        async [ProductsTypes.actions.DELETE_PRODUCT]({ commit }, id): Promise<boolean> {
+            try {
+                await productsHttpRepository.deleteProducts(id);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        },
+        async [ProductsTypes.actions.FETCH_PRODUCTS_DAILY]({ commit }): Promise<boolean> {
             try {
                 // tslint:disable-next-line:no-shadowed-variable
-                const products = await productsHttpRepository.getProductsDailyRecommendation();
-                commit(SET_PRODUCTS_DAILY, products);
+                const products: Product[] = await productsHttpRepository.getProductsDailyRecommendation();
+                commit(ProductsTypes.mutations.SET_PRODUCTS_DAILY, products);
                 return true;
             } catch (e) {
                 return false;
             }
         },
-        async [FETCH_PRODUCTS_DAILY_DETAIL_PHOTOS]({ commit }, products): Promise<boolean> {
+        async [ProductsTypes.actions.FETCH_PRODUCTS_DAILY_DETAIL_PHOTOS](
+            { commit },
+            products: Product[],
+        ): Promise<boolean> {
             try {
                 for (const product of products) {
-                    // tslint:disable-next-line:max-line-length
-                    product.photos[0] = await productsFirebaseRepository.getProductPhotoByName(product.id, product.photos[0].content );
+                    product.productPhotos![0] = await productsFirebaseRepository.getProductPhotoByName(
+                        product.id!,
+                        product.productPhotos![0].content!,
+                    );
                 }
-                commit(SET_PRODUCTS_DAILY, products);
-                commit(SET_PRODUCT_DAILY_AND_PHOTOS_LOADED, true);
+                commit(ProductsTypes.mutations.SET_PRODUCTS_DAILY, products);
+                commit(ProductsTypes.mutations.SET_PRODUCT_DAILY_AND_PHOTOS_LOADED, true);
                 return true;
             } catch (e) {
                 return false;
             }
         },
-        async [CREATE_PRODUCT]({commit}, product): Promise<any>{
+        async [ProductsTypes.actions.CREATE_PRODUCT](
+            { commit },
+            product: ProductCreate,
+        ): Promise<Product | boolean> {
             try {
-                const response = await await productsHttpRepository.createProduct(product);
+                delete product.photosFiles;
+                const response: Product = await productsHttpRepository.createProduct(product);
                 return response;
             } catch (e) {
                 return false;
-            }            
+            }
         },
-        async [UPLOAD_IMAGE]({commit}, imageAndProduct): Promise<boolean>{
-            try {                
-                const response = await await productsFirebaseRepository.uploadImage(imageAndProduct.image, imageAndProduct.id);
+        async [ProductsTypes.actions.FETCH_PRODUCT_IMAGE]({ commit }, imageAndProduct): Promise<boolean> {
+            try {
+                const photo = await productsFirebaseRepository.getProductPhotoByName(
+                    imageAndProduct.id,
+                    imageAndProduct.image,
+                );
+                return photo;
+            } catch (e) {
+                return false;
+            }
+        },
+        async [ProductsTypes.actions.UPDATE_IMAGE]({ commit }, imageAndProduct): Promise<boolean> {
+            try {
+                await productsFirebaseRepository.updateImage(
+                    imageAndProduct.oldFile,
+                    imageAndProduct.newFile,
+                    imageAndProduct.id,
+                );
                 return true;
             } catch (e) {
                 return false;
-            }  
+            }
         },
-        async [SAVE_PRODUCT_PHOTOS]({commit}, imageAndProduct): Promise<boolean>{
-            try {                
-                console.log(imageAndProduct);
-                const response = await await productsHttpRepository.uploadImage(imageAndProduct);
+        async [ProductsTypes.actions.UPLOAD_IMAGE]({ commit }, imageAndProduct): Promise<boolean> {
+            try {
+                await productsFirebaseRepository.uploadImage(imageAndProduct.image, imageAndProduct.id);
                 return true;
             } catch (e) {
                 return false;
-            }              
+            }
         },
-        async [SAVE_PRODUCT_DIMENSION]({commit}, imageAndProduct): Promise<boolean>{
-            try {                
-                const response = await await productsHttpRepository.createDimension(imageAndProduct);
+        async [ProductsTypes.actions.SAVE_PRODUCT_PHOTOS](
+            { commit },
+            imageAndProduct: ProductPhotoDto,
+        ): Promise<boolean> {
+            try {
+                imageAndProduct;
+                await productsHttpRepository.uploadImage(imageAndProduct);
                 return true;
             } catch (e) {
                 return false;
-            } 
+            }
         },
-        async [SAVE_INVENTORY_QUANTITY]({commit}, inventoryData): Promise<boolean>{
-            try {                
-                const response = await await productsHttpRepository.saveInventary(inventoryData);
+        async [ProductsTypes.actions.SAVE_PRODUCT_DIMENSION](
+            { commit },
+            imageAndProduct: dimensionDto,
+        ): Promise<boolean> {
+            try {
+                await productsHttpRepository.createDimension(imageAndProduct);
                 return true;
             } catch (e) {
                 return false;
-            } 
+            }
         },
-        async [UPDATE_INVENTORY_QUANTITY]({commit}, inventoryData): Promise<boolean>{
-            try {                
-                const response = await await productsHttpRepository.updateInventory(inventoryData);
+        async [ProductsTypes.actions.SAVE_INVENTORY_QUANTITY]({ commit }, inventoryData): Promise<boolean> {
+            try {
+                await productsHttpRepository.saveInventary(inventoryData);
                 return true;
             } catch (e) {
                 return false;
-            } 
+            }
+        },
+        async [ProductsTypes.actions.UPDATE_INVENTORY_QUANTITY]({ commit }, inventoryData): Promise<boolean> {
+            try {
+                await productsHttpRepository.updateInventory(inventoryData);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        },
+        async [ProductsTypes.actions.CREATE_PRODUCT_RATING](
+            { commit },
+            productRating: ProductRatingCreate,
+        ): Promise<boolean> {
+            try {
+                await productsHttpRepository.createProductRating(productRating);
+                return true;
+            } catch (e) {
+                return false;
+            }
         },
     },
 };

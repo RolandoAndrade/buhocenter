@@ -1,0 +1,1 @@
+este es un archivo para que la carpeta de reports/pdfs se mantenga activa, y git no la ignore

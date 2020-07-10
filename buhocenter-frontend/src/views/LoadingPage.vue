@@ -7,23 +7,16 @@
         </v-row>
         <v-col>
             <v-col offset="2" cols="8">
-                <v-progress-linear
-                        indeterminate
-                        primary
-                ></v-progress-linear>
+                <v-progress-linear indeterminate primary></v-progress-linear>
             </v-col>
         </v-col>
     </v-container>
 </template>
 
 <script lang="ts">
-    import {Component, Vue} from "vue-property-decorator";
-    @Component({})
-    export default class LoadingPage extends Vue {
-    }
+import { Component, Vue } from 'vue-property-decorator';
+@Component({})
+export default class LoadingPage extends Vue {}
 </script>
 
-<style>
-
-
-</style>
+<style></style>

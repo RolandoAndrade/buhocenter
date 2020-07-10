@@ -18,11 +18,13 @@ h1 {
 h2 {
     /*16px via YUI Fonts CSS foundation*/
     font-size:20px;
+    letter-spacing: 5px;
 }
 
 h3 {
     /*14px via YUI Fonts CSS foundation*/
     font-size:18px;
+
 }
 
 /* margin and padding values are reset for all these elements

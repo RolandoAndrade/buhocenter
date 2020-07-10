@@ -1,18 +1,10 @@
-import { Module } from '@nestjs/common';
-import { NotificationsService } from './services/notifications.service';
-import { NotificationsController } from './controllers/notifications.controller';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { notificationsEntities } from './entities';
+import { Module, forwardRef } from '@nestjs/common';
+import { EmailsService } from './services/emails.service';
+import { ProductsModule } from '../products/products.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature(notificationsEntities),
-  ],
-  providers: [
-    NotificationsService
-  ],
-  controllers: [
-    NotificationsController
-  ]
+    imports: [ProductsModule],
+    providers: [EmailsService],
+    exports: [EmailsService],
 })
 export class NotificationsModule {}

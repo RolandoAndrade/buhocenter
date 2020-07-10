@@ -1,14 +1,14 @@
-import firebase from "firebase";
+import firebase from 'firebase';
 
 const config = {
-    apiKey: "AIzaSyDAF-RBZ8PwnxOaYIaPV4s9Z7eqVPOFyNM",
-    authDomain: "buhocenter.firebaseapp.com",
-    databaseURL: "https://buhocenter.firebaseio.com",
-    projectId: "buhocenter",
-    storageBucket: "buhocenter.appspot.com",
-    messagingSenderId: "205448199268",
-    appId: "1:205448199268:web:5f12aa31eedf3694fa7371",
-    measurementId: "G-4F0Q6HBPSE"
+    apiKey: `${process.env.VUE_APP_BUHOCENTER_FIREBASE_API_KEY}`,
+    authDomain: `${process.env.VUE_APP_BUHOCENTER_FIREBASE_AUTH_DOMAIN}`,
+    databaseURL: `${process.env.VUE_APP_BUHOCENTER_FIREBASE_DB_URL}`,
+    projectId: `${process.env.VUE_APP_BUHOCENTER_FIREBASE_PROJECT_ID}`,
+    storageBucket: `${process.env.VUE_APP_BUHOCENTER_FIREBASE_STORAGE_BUCKET}`,
+    messagingSenderId: `${process.env.VUE_APP_BUHOCENTER_FIREBASE_MS_ID}`,
+    appId: `${process.env.VUE_APP_BUHOCENTER_FIREBASE_APP_ID}`,
+    measurementId: `${process.env.VUE_APP_BUHOCENTER_FIREBASE_MEASUREMENT_ID}`,
 };
 
 firebase.initializeApp(config);

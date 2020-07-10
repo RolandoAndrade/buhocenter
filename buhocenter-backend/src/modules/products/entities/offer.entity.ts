@@ -1,26 +1,30 @@
-import { Entity, Column, OneToMany, ManyToOne, JoinColumn} from 'typeorm';
-import { BaseEntity } from '../../app/entities/base-entity';
-import { productOffer } from './product-offer.entity';
-import { ServiceOffer } from '../../services/entities/service-offer.entity';
+import { Entity, Column, OneToMany, ManyToOne, JoinColumn } from 'typeorm';
+import { PrimalEntity } from '../../../app/entities/base-entity';
+import { Product } from './product.entity';
 import { Status } from '../../status/entities/status.entity';
 
+@Entity('offers')
+export class Offer extends PrimalEntity {
+    @Column({ name: 'name', type: 'text', nullable: true })
+    name: string;
 
-@Entity('oferta') 
-export class Offer extends BaseEntity {
-	
-	@Column({ name: 'name', type: 'text', nullable: true })
-	name: string;
+    @Column({ name: 'description', type: 'text', nullable: true })
+    description: string;
 
-	@Column({ name: 'description', type: 'text', nullable: true })
-	description: string;
+    @Column({ name: 'percentage', type: 'decimal', nullable: true })
+    percentage: number;
 
-	@OneToMany(type => productOffer, productOffers => productOffers.offer)
-	productOffers: productOffer[];
+    @OneToMany(
+        type => Product,
+        products => products.offer,
+    )
+    products: Product[];
 
-	@OneToMany(type => ServiceOffer, serviceOffers => serviceOffers.offer)
-	serviceOffers: ServiceOffer[];
-
-	@JoinColumn({ name: 'status_id' })
-	@ManyToOne(type => Status, status => status.offers)
-	status: Status;
+    @JoinColumn({ name: 'status_id' })
+    @ManyToOne(
+        type => Status,
+        status => status.statusOffers,
+        { nullable: false },
+    )
+    status: Status;
 }

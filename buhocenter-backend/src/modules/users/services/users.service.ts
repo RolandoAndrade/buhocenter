@@ -1,23 +1,28 @@
-import { Injectable, Inject } from '@nestjs/common';
+import {
+    Injectable,
+    Inject,
+    InternalServerErrorException,
+    NotFoundException,
+    BadRequestException,
+    UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { Logger } from 'winston';
-import { SendGridService } from '@anchan828/nest-sendgrid';
-import {GmailDto} from '../dto/GmailDto.dto';
+import { GmailDto } from '../dto/GmailDto.dto';
 import { Repository } from 'typeorm';
-import { Customer } from '../entities/customer.entity';
-import {ResponseAuth} from '../interfaces/ResponseAuth';
-import { STATUS, ROLE, LANGUAGE } from '../../../config/constants';
-import {CustomerDto} from '../dto/Customer.dto';
-import {ResponseRegister} from '../interfaces/ResponseRegister';
+import { User } from '../entities/user.entity';
+import { ResponseAuth } from '../interfaces/ResponseAuth';
+import { STATUS, ROLE, LANGUAGE, FOREIGN_EXCHANGES } from '../../../config/constants';
 import { AuthService } from '../../auth/services/auth.service';
+import { EmailsService } from '../../notifications/services/emails.service';
 
 @Injectable()
 export class UsersService {
     constructor(
         @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger,
-        @InjectRepository(Customer) private customerRepository: Repository<Customer>,
-        private readonly sendGrid: SendGridService,
+        @InjectRepository(User) private usersRepository: Repository<User>,
+        private readonly emailsService: EmailsService,
         private readonly authService: AuthService,
     ) {}
 
@@ -25,48 +30,27 @@ export class UsersService {
      * Returns the customer found by the parameter received
      * @param uid parameter to obtain the customer
      */
-    async getUserByUuid(uid: string): Promise<Customer> {
-        this.logger.debug(`login: customer exists [uid=${uid}]`, { context: UsersService.name } );
+    async getUserByUuid(uid: string): Promise<User> {
+        this.logger.debug(`login: customer exists [uid=${uid}]`, {
+            context: UsersService.name,
+        });
 
-        return await this.customerRepository.findOne({
+        return await this.usersRepository.findOne({
             where: { uid },
+            relations: ['status'],
         });
     }
 
     /**
-     * Updates customer information
-     * @param customer represents the customer entity which will be modified
-     * @returns Promise<Customer>
+     * Updates user information
+     * @param user represents the user entity which will be modified
+     * @returns Promise<User>
      */
-    public async updateCustomer(customer: Partial<Customer>): Promise<Customer> {
-        this.logger.debug(`updateCustomer: update customer information [customer=${
-            JSON.stringify(customer)}]`, { context: UsersService.name } );
-        return await this.customerRepository.save(customer);
-    }
-
-    /**
-     * Send the welcome email to the customer
-     * @param data customer entity to send the email
-     * @returns Promise<boolean>
-     */
-    async sendEmailWelcome(data: { email: string; name: string; }): Promise<boolean> {
-        try {
-            const response = await this.sendGrid.send({
-                to: data.email,
-                from: 'buhocenter@gmail.com',
-                subject: 'Welcome to buhocenter',
-                templateId: 'd-4aa3a2d7aca54bdaa2688806f2401864',
-                // @ts-ignore
-                dynamic_template_data: {
-                    name: data.name,
-                },
-            });
-            this.logger.debug(`sendEmailWelcome: email sended [email=${data.email}]`, { context: UsersService.name } );
-            return true;
-        } catch (e) {
-            this.logger.debug(`sendEmailWelcome: catch error email [email=${data.email}]`, { context: UsersService.name } );
-            return false;
-        }
+    public async updateUser(user: Partial<User>): Promise<User> {
+        this.logger.debug(`updateUser: update user information [user=${JSON.stringify(user)}]`, {
+            context: UsersService.name,
+        });
+        return await this.usersRepository.save(user);
     }
 
     /**
@@ -74,35 +58,25 @@ export class UsersService {
      * it sends the welcome mail to our platform
      * @param data customer entity which will be registered
      */
-    async registerCustomer(data: CustomerDto): Promise<ResponseRegister> {
-        this.logger.debug(`registerCustomer: creating customer [customer=${JSON.stringify(data)}]`,
-            { context: UsersService.name } );
+    async registerUser(user: Partial<User>): Promise<User> {
+        this.logger.debug(`registerUser: creating user [user=${JSON.stringify(user)}]`, {
+            context: UsersService.name,
+        });
 
         try {
-            let response: ResponseRegister;
-            const customerSave: Customer = await this.customerRepository.save({
-                name: data.name,
-                lastName: data.lastname,
-                uid: data.uid,
-                email: data.email,
-                birthdate: data.birthdate,
-                language:  data.language,
-                is_federate: false,
-                status: {
-                    id: STATUS.ACTIVE.id,
-                },
-                role: {
-                    id: ROLE.CUSTOMER.id,
+            const userCreated: User = await this.usersRepository.save(user);
+            await this.emailsService.sendEmailWelcome(user.email, user.name);
 
-                },
+            this.logger.debug(`registerUser: user created! [id=${userCreated.id}]`, {
+                context: UsersService.name,
             });
-            await this.sendEmailWelcome({email: data.email, name: data.name});
-            this.logger.debug(`registerCustomer: user created! [id=${customerSave.id}]`, { context: UsersService.name } );
-            response = { message: 'Created' };
-            return response;
+
+            return userCreated;
         } catch (e) {
-            this.logger.error(`registerCustomer: error creating customer [error=${e.message}]`, { context: UsersService.name } );
-            return { message: 'Error creating customer' };
+            this.logger.error(`registerUser: error creating customer [error=${e.message}]`, {
+                context: UsersService.name,
+            });
+            throw new InternalServerErrorException('Error creating user');
         }
     }
 
@@ -111,21 +85,21 @@ export class UsersService {
      * the necessary credentials to access to our API
      * @param data object that contains the token and uid given by firebase
      */
-    async login(data: { token: string, uid: string }): Promise<any> {
-        const customer: Customer = await this.getUserByUuid(data.uid);
-        let customerSave: Customer;
+    async login(data: { token: string; uid: string }): Promise<any> {
+        const customer: User = await this.getUserByUuid(data.uid);
+        let customerSave: User;
         let response: ResponseAuth;
-        if ( customer ) {
-            const newcustomer: Customer = this.customerRepository.merge(customer, {
+        if (customer) {
+            if (customer.status.id === STATUS.INACTIVE.id) {
+                throw new UnauthorizedException('The user cannot enter to the system because are inactive');
+            }
+            const newcustomer: User = this.usersRepository.merge(customer, {
                 token: data.token,
             });
-            customerSave = await this.customerRepository.save(newcustomer);
-            customerSave = await this.customerRepository.findOne({
+            customerSave = await this.usersRepository.save(newcustomer);
+            customerSave = await this.usersRepository.findOne({
                 where: { id: customerSave.id },
-                relations: [
-                    'role',
-                    'addresses',
-                ],
+                relations: ['role', 'addresses'],
             });
             response = {
                 apiAccessToken: await this.authService.login(customerSave),
@@ -136,25 +110,52 @@ export class UsersService {
                     lastName: customerSave.lastName,
                     uid: customerSave.uid,
                     email: customerSave.email,
+                    cellphone: customerSave.cellphone,
                     is_federate: customerSave.is_federate,
                     status: customerSave.status,
                     role: customerSave.role,
                     birthDate: customerSave.birthdate,
                     language: customerSave.language,
-                    addresses: customerSave.addresses.filter((i) => i.status && i.status.id === STATUS.ACTIVE.id),
+                    addresses: customerSave.addresses.filter(
+                        i => i.status && i.status.id === STATUS.ACTIVE.id,
+                    ),
                 },
             };
-            this.logger.debug(`login: customer exist [id=${customer.id}]`, { context: UsersService.name } );
+            this.logger.debug(`login: customer exist [id=${customer.id}]`, {
+                context: UsersService.name,
+            });
             return response;
         }
-        this.logger.error(`login: customer not exist [uid=${data.uid}]`, { context: UsersService.name } );
+        this.logger.error(`login: customer not exist [uid=${data.uid}]`, {
+            context: UsersService.name,
+        });
         return false;
     }
 
-    async getUsers(id: number): Promise<number> {
-        this.logger.debug(`getUsers: obteniendo el id del usuario [id=${id}|env=${process.env.ROPSTEN_TESTNET_API_KEY}]`);
-        this.logger.error(`getUsers: obteniendo el id del usuario [id=${id}]`, { context: UsersService.name } );
-        return id;
+    /**
+     * Returns the user according to the given id
+     * @param id user id
+     * @returns Promise<User>
+     */
+    public async getUserById(id: number): Promise<User> {
+        this.logger.debug(`getUserById: returning user by id [id=${id}]`);
+
+        return await this.usersRepository.findOne(id);
+    }
+
+    /**
+     * Returns the users saved
+     * @returns Promise<User[]>
+     */
+    public async getUsers(): Promise<User[]> {
+        this.logger.debug(`getUsers: returning users`);
+
+        return await this.usersRepository.find({
+            relations: ['role', 'status'],
+            order: {
+                id: 'ASC',
+            },
+        });
     }
 
     /**
@@ -164,48 +165,53 @@ export class UsersService {
      */
     async validateRegisterSocial(data: GmailDto): Promise<ResponseAuth> {
         try {
-            const customer: Customer = await this.getUserByUuid(data.clientData.uid);
-            let customerSave: Customer;
+            const customer: User = await this.getUserByUuid(data.clientData.uid);
+            let customerSave: User;
             let response: ResponseAuth;
-            if ( customer ) {
-                const newcustomer: Customer = this.customerRepository.merge(customer, {
-                    token: data.token, is_federate: true,
+            if (customer) {
+                if (customer.status.id === STATUS.INACTIVE.id) {
+                    throw new UnauthorizedException(
+                        'The user cannot enter to the system because are inactive',
+                    );
+                }
+                const newcustomer: User = this.usersRepository.merge(customer, {
+                    token: data.token,
+                    is_federate: true,
                 });
-                customerSave = await this.customerRepository.save(newcustomer);
-                customerSave = await this.customerRepository.findOne({
+                customerSave = await this.usersRepository.save(newcustomer);
+                customerSave = await this.usersRepository.findOne({
                     where: { id: customerSave.id },
-                    relations: [
-                        'role',
-                        'addresses',
-                    ],
+                    relations: ['role', 'addresses'],
                 });
-                this.logger.debug(`validateRegisterSocial: customer exist [id=${newcustomer.id}]`, { context: UsersService.name } );
+                this.logger.debug(`validateRegisterSocial: customer exist [id=${newcustomer.id}]`, {
+                    context: UsersService.name,
+                });
             } else {
                 // @ts-ignore
-                customerSave = await this.customerRepository.save({
+                customerSave = await this.usersRepository.save({
                     name: data.clientData.first_name,
                     lastName: data.clientData.last_name,
                     uid: data.clientData.uid,
                     email: data.clientData.email,
                     token: data.token,
                     is_federate: true,
+                    foreignExchange: { id: FOREIGN_EXCHANGES.USD.id },
                     status: {
                         id: STATUS.ACTIVE.id,
                     },
                     role: {
                         id: ROLE.CUSTOMER.id,
                     },
-                    language:  LANGUAGE.ENGLISH.id,
+                    language: LANGUAGE.ENGLISH.id,
                 });
-                customerSave = await this.customerRepository.findOne({
+                customerSave = await this.usersRepository.findOne({
                     where: { id: customerSave.id },
-                    relations: [
-                        'role',
-                        'addresses',
-                    ],
+                    relations: ['role', 'addresses'],
                 });
-                this.logger.debug(`validateRegisterSocial: New customer registered [id=${customerSave.id}]`, { context: UsersService.name } );
-                await this.sendEmailWelcome({email: data.clientData.email, name: data.clientData.first_name});
+                this.logger.debug(`validateRegisterSocial: New customer registered [id=${customerSave.id}]`, {
+                    context: UsersService.name,
+                });
+                await this.emailsService.sendEmailWelcome(data.clientData.email, data.clientData.first_name);
             }
             response = {
                 apiAccessToken: await this.authService.login(customerSave),
@@ -217,17 +223,21 @@ export class UsersService {
                     email: customerSave.email,
                     uid: customerSave.uid,
                     status: customerSave.status,
-                    role: {...customerSave.role},
+                    role: { ...customerSave.role },
                     is_federate: customerSave.is_federate,
+                    cellphone: customerSave.cellphone,
                     birthDate: customerSave.birthdate,
                     language: customerSave.language,
-                    addresses: customerSave.addresses.filter((i) => i.status && i.status.id === STATUS.ACTIVE.id),
+                    addresses: customerSave.addresses.filter(
+                        i => i.status && i.status.id === STATUS.ACTIVE.id,
+                    ),
                 },
-
             };
             return response;
         } catch (e) {
-            this.logger.error(`validateRegisterSocial: error message [e=${e.message}]`, { context: UsersService.name } );
+            this.logger.error(`validateRegisterSocial: error message [e=${e.message}]`, {
+                context: UsersService.name,
+            });
         }
     }
 
@@ -235,24 +245,28 @@ export class UsersService {
      * Funcion para deslogear y borrar token en el customer
      * @param data string que trae el UID del usuario a ser deslogeado
      */
-    async logout(data: string): Promise<{ logout: boolean; }> {
-        const customer: Customer =   await this.customerRepository.findOne({
+    async logout(data: string): Promise<{ logout: boolean }> {
+        const customer: User = await this.usersRepository.findOne({
             where: {
                 uid: data,
             },
         });
-        let response: { logout: boolean; };
+        let response: { logout: boolean };
         if (customer) {
-            const newcustomer: Customer = this.customerRepository.merge(customer, {
+            const newcustomer: User = this.usersRepository.merge(customer, {
                 token: '',
             });
-            await this.customerRepository.save(newcustomer);
-            this.logger.debug(`logout: loguot success, customer [id=${data}]`, { context: UsersService.name } );
+            await this.usersRepository.save(newcustomer);
+            this.logger.debug(`logout: loguot success, customer [id=${data}]`, {
+                context: UsersService.name,
+            });
             response = {
                 logout: true,
             };
         } else {
-            this.logger.error(`logout: loguot error, customer [id=${data}]`, { context: UsersService.name } );
+            this.logger.error(`logout: loguot error, customer [id=${data}]`, {
+                context: UsersService.name,
+            });
             response = {
                 logout: false,
             };
@@ -260,7 +274,20 @@ export class UsersService {
         return response;
     }
 
-    async findUser(UserID: number): Promise<Customer> {
-        return await this.customerRepository.findOne(UserID);
+    /**
+     * getUserByAddress
+     * @param addressId: number
+     * @returns Promise<User>
+     */
+    async getUserByAddress(addressId: number): Promise<User> {
+        this.logger.debug(`getUserByAddress: Getting a user by its address [addressId=${addressId}]`, {
+            context: UsersService.name,
+        });
+
+        return await this.usersRepository
+            .createQueryBuilder('user')
+            .innerJoin('user.addresses', 'addresses')
+            .where('addresses.id = :addressId', { addressId: addressId })
+            .getOne();
     }
 }

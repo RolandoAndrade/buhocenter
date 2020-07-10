@@ -1,17 +1,15 @@
 import { Entity, Column, OneToMany } from 'typeorm';
-import { BaseEntity } from '../../app/entities/base-entity';
-import { ProductProvider } from './product-provider.entity';
-import { ServiceProvider } from '../../services/entities/service-provider.entity';
+import { PrimalEntity } from '../../../app/entities/base-entity';
+import { Product } from './product.entity';
 
-@Entity({ name: 'provider' }) 
-export class Provider extends BaseEntity {
+@Entity({ name: 'providers' })
+export class Provider extends PrimalEntity {
+    @Column({ name: 'name', type: 'varchar', length: 100, nullable: false })
+    name: string;
 
-	@Column({ name: 'name', type: 'text', nullable: false })
-	name: string;
-
-	@OneToMany(type => ProductProvider, productProviders => productProviders.provider)
-    productProviders: ProductProvider[];
-    
-    @OneToMany(type => ServiceProvider, serviceProviders => serviceProviders.provider)
-	serviceProviders: ServiceProvider[];
+    @OneToMany(
+        type => Product,
+        products => products.provider,
+    )
+    products: Product[];
 }

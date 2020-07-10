@@ -9,6 +9,7 @@ export interface ResponseAuth {
         status: any;
         role: any;
         email: string;
+        cellphone: string;
         is_federate: boolean;
         birthDate: Date;
         language: any;

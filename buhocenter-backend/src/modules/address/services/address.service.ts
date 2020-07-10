@@ -1,37 +1,48 @@
-import { Injectable, Inject, BadRequestException } from '@nestjs/common'
-import { Repository} from 'typeorm'
-import { AddressVerificationDto, AddressVerificationRO, AddressVerificationSO } from '../dto/AddressVerification.dto'
-import { Address } from '../entities/address.entity'
-import { AddressHttpRepository } from '../repositories/address-http.repository'
-import { UsersService } from '../../users/services/users.service'
+import { Injectable, Inject, BadRequestException } from '@nestjs/common';
+import { Repository, UpdateResult } from 'typeorm';
+import {
+    AddressVerificationDto,
+    AddressVerificationRO,
+    AddressVerificationSO,
+} from '../dto/AddressVerification.dto';
+import { Address } from '../entities/address.entity';
+import { AddressValidationRepository } from '../repositories/address.repository';
+import { UsersService } from '../../users/services/users.service';
 import { STATUS } from '../../../config/constants';
-import { StatusService } from '../../status/services/status.service'  
-import { Logger } from 'winston'
-import { WINSTON_MODULE_PROVIDER } from 'nest-winston'
+import { StatusService } from '../../status/services/status.service';
+import { Logger } from 'winston';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
+import { InjectRepository } from '@nestjs/typeorm';
 
-@Injectable() 
+@Injectable()
 export class AddressService {
     constructor(
-        @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger,
-        @Inject(UsersService)
+        @Inject(WINSTON_MODULE_PROVIDER) private readonly _logger: Logger,
         private readonly usersService: UsersService,
-        @Inject(StatusService)
         private readonly statusService: StatusService,
-        @Inject(AddressHttpRepository) private readonly addressHttpRepository: AddressHttpRepository,
-    ){}
+        private readonly addressValidationRepository: AddressValidationRepository,
+        @InjectRepository(Address) private addressRepository: Repository<Address>,
+    ) {}
 
-    private async checkDefault(customerId: number, addressEntityManager: Repository<Address>){
-        this.logger.debug(`checkDefault: checking address [customerId=${customerId}]`, { context: AddressService.name });
-        const active = STATUS.ACTIVE.id;
-        const verifyDefault = await addressEntityManager.findOne({
-            where: [{ customer: customerId, status: active }]
+    /**
+     * Checks if a given user has a default address
+     * @param userId user id to check if it has default address
+     * @param addressEntityManager transactional address repository
+     */
+    private async userHasDefaultAddress(userId: number) {
+        this._logger.debug(`userHasDefaultAddress: checking user addresses [userId=${userId}]`, {
+            context: AddressService.name,
         });
 
-        if (verifyDefault) {
-            return false;
-        } else {
+        const defaultAddress: Address = await this.addressRepository.findOne({
+            where: { user: userId, status: STATUS.ACTIVE.id },
+        });
+
+        if (defaultAddress) {
             return true;
         }
+
+        return false;
     }
 
     /**
@@ -39,29 +50,37 @@ export class AddressService {
      * @param address address to save in database
      * @param addressEntityManager transactional address repository
      */
-    private async saveAddress(address: AddressVerificationDto, addressEntityManager: Repository<Address>): Promise<void> {
-        this.logger.debug(`saveAddress: saving address [address=${JSON.stringify(address)}]`, { context: AddressService.name });
+    private async saveAddress(
+        address: AddressVerificationDto,
+        addressEntityManager: Repository<Address>,
+    ): Promise<void> {
+        this._logger.debug(`saveAddress: saving address [address=${JSON.stringify(address)}]`, {
+            context: AddressService.name,
+        });
 
         try {
-            let currentCustomer = await this.usersService.findUser(address.customer.id);
-            let allowDefault = await this.checkDefault(currentCustomer.id,addressEntityManager);
-            let newAddress:Address =  new Address();
+            const hasDefaultAddress: boolean = await this.userHasDefaultAddress(address.user.id);
 
-            newAddress.firstStreet = address.firstStreet;
-            newAddress.secondStreet = address.secondStreet;
-            newAddress.city = address.cityName;
-            newAddress.state = address.state;
-            newAddress.zipcode = address.zipcode;
-            newAddress.customer = currentCustomer;
-            newAddress.status = await this.statusService.getStatus(STATUS.ACTIVE.id);
-            newAddress.setDefault = (allowDefault && address.default);
+            const newAddress: Partial<Address> = {
+                firstStreet: address.firstStreet,
+                secondStreet: address.secondStreet,
+                city: address.cityName,
+                state: address.state,
+                zipcode: address.zipcode,
+                user: await this.usersService.getUserById(address.user.id),
+                status: await this.statusService.getStatusById(STATUS.ACTIVE.id),
+                setDefault: !hasDefaultAddress,
+            };
 
             await addressEntityManager.save(newAddress);
 
-            this.logger.debug(`saveAddress: address saved!`, { context: AddressService.name });
-
-        } catch(e) {
-            this.logger.error(`saveAddress: failed saving address in database [error=${e.message}]`, { context: AddressService.name });
+            this._logger.debug(`saveAddress: address saved!`, {
+                context: AddressService.name,
+            });
+        } catch (e) {
+            this._logger.error(`saveAddress: failed saving address in database [error=${e.message}]`, {
+                context: AddressService.name,
+            });
 
             throw new BadRequestException('Error when saving address in database');
         }
@@ -71,119 +90,145 @@ export class AddressService {
      * Verifies the given address using SmartyStreets
      * @param body address to verify
      */
-    private async verificateAddress(body: AddressVerificationSO){
-        this.logger.error(`verificateAddress: verifying address [address=${JSON.stringify(body)}]`,
-            { context: AddressService.name });
-        try {
-            return await this.addressHttpRepository.postAddressUri(body,{
-                "auth-id" : `${process.env.SMARTSTREET_AUTH_KEY}`,
-                "auth-token" : `${process.env.SMARTSTREET_AUTH_TOKEN}`
-            });
-        } catch(e) {
-            this.logger.error(`verificateAddress: failed verifying address [address=${JSON.stringify(body)}|e=${e}]`,
-                { context: AddressService.name });
-                
-            throw new Error('Error validating address');
+    private async verificateAddress(body: AddressVerificationSO) {
+        this._logger.debug(`verificateAddress: verifying address [address=${JSON.stringify(body)}]`, {
+            context: AddressService.name,
+        });
+        return await this.addressValidationRepository.postAddressUri(body);
+    }
+
+    async checkAddress(
+        addressRecibeByAPIValidator: AddressVerificationRO,
+        addressSent: AddressVerificationDto,
+        addressEntityManager: Repository<Address>,
+    ) {
+        this._logger.debug(`checkAddress: checking address [address=${JSON.stringify(addressSent)}]`, {
+            context: AddressService.name,
+        });
+
+        if (this.addressValidationAnalysis(addressRecibeByAPIValidator)) {
+            await this.saveAddress(addressSent, addressEntityManager);
+            return addressRecibeByAPIValidator;
+        } else {
+            this._logger.debug(
+                `checkAddress: invalid address [address=${JSON.stringify(
+                    addressRecibeByAPIValidator,
+                )}]|addressSent=${JSON.stringify(addressSent)}]`,
+                { context: AddressService.name },
+            );
+            throw new BadRequestException('Invalid address');
         }
     }
 
-    async checkAddress(address: AddressVerificationRO, body, addressEntityManager: Repository<Address>){
-        this.logger.debug(`checkAddress: checking address [address=${JSON.stringify(body)}]`, { context: AddressService.name });
-        
-        if (address && address[0].metadata.precision === "Unknown") {
-            this.logger.debug(`checkAddress: invalid address [address=${JSON.stringify(address)}]|body=${JSON.stringify(body)}]`,
-                { context: AddressService.name });
-
-            throw new BadRequestException('Invalid address');
-        } else {
-            this.saveAddress(body, addressEntityManager);        
-            return address;
-        }    
-    }
-
     /**
-    * Send the request to verify the customer provided address
-    * @param body address to verify
-    * @returns string
-    */
-    async addressControl(body: AddressVerificationDto, addressEntityManager) {   
-        this.logger.debug(`addressControl: address verification request succesfully [address= ${JSON.stringify(body)}]`,
-            { context: AddressService.name });
- 
-        let addressSO:AddressVerificationSO= {
-            'candidates' : 10,match : 'invalid',"street" :  `${body.firstStreet}`,
-            "street2" :  `${body.secondStreet}`,"city" :  `${body.cityName}`,
-            "state" :  `${body.state}`,"zipcode" : `${body.zipcode}`
+     * Send the request to verify the customer provided address
+     * @param body address to verify
+     * @param addressEntityManager
+     * @returns string
+     */
+    public async addressControl(body: AddressVerificationDto, addressEntityManager) {
+        this._logger.debug(
+            `addressControl: address sending request to validate address [address= ${JSON.stringify(body)}]`,
+            { context: AddressService.name },
+        );
+
+        const addressSO: AddressVerificationSO = {
+            candidates: 1,
+            match: 'strict',
+            street: `${body.firstStreet}`,
+            street2: `${body.secondStreet}`,
+            city: `${body.cityName}`,
+            state: `${body.state}`,
+            zipcode: `${body.zipcode}`,
         };
 
-        let addressDetail: AddressVerificationRO = await this.verificateAddress(addressSO);   
-        this.logger.debug(`addressControl: address verified [addressDetail=${JSON.stringify(addressDetail)}]`, { context: AddressService.name });
+        const addressDetail: AddressVerificationRO = await this.verificateAddress(addressSO);
+
+        this._logger.debug(
+            `addressControl: address verified [addressDetail=${JSON.stringify(addressDetail)}]`,
+            { context: AddressService.name },
+        );
         return this.checkAddress(addressDetail, body, addressEntityManager);
     }
 
     /**
      * This method modifies the customer's current default address
-     * @param addressId id of default current address 
+     * @param addressId id of default current address
      * @param customerId logged in customer id
      * @param addressEntityManager transactional address repository
      */
-    async updateAddressDefault(addressId: number, customerId: number, addressEntityManager: Repository<Address>){
-        this.logger.info(`updateAddressDefault: modifying default address [addressId=${addressId}|customerId=${customerId}]`,
-            { context: AddressService.name });
+    async updateAddressDefault(
+        addressId: number,
+        customerId: number,
+        addressEntityManager: Repository<Address>,
+    ) {
+        this._logger.info(
+            `updateAddressDefault: modifying default address [addressId=${addressId}|customerId=${customerId}]`,
+            { context: AddressService.name },
+        );
 
-        let active = STATUS.ACTIVE.id;
+        const active = STATUS.ACTIVE.id;
 
-        let verifyDefault= await addressEntityManager.findOne({
-            where: [{ customer: customerId, status: active, setDefault: true }]
+        const verifyDefault = await addressEntityManager.findOne({
+            where: [{ user: customerId, status: active, setDefault: true }],
         });
 
-        if (verifyDefault){
-            this.logger.info(`updateAddressDefault: user previous default address [address=${JSON.stringify(verifyDefault)}]`,
-                { context: AddressService.name });
+        if (verifyDefault) {
+            this._logger.info(
+                `updateAddressDefault: user previous default address [address=${JSON.stringify(
+                    verifyDefault,
+                )}]`,
+                { context: AddressService.name },
+            );
 
             verifyDefault.setDefault = false;
             await addressEntityManager.save(verifyDefault);
         }
 
-        let addressCurrentDefault = await addressEntityManager.findOne(addressId);        
+        const addressCurrentDefault = await addressEntityManager.findOne(addressId);
         addressCurrentDefault.setDefault = true;
         await addressEntityManager.save(addressCurrentDefault);
 
-        return "Address modified succesfully";
+        return 'Address modified succesfully';
     }
 
     /**
      * Deletes the given address
-     * @param addressId address id to delete
-     * @param addressEntityManager 
+     * @param id address id to delete
      */
-    async deleteAddress(addressId: number, addressEntityManager: Repository<Address>){
-        this.logger.info(`deleteAddress: deleting address [addressId=${addressId}]`, { context: AddressService.name });
-        
-        let innactiveAddress = await addressEntityManager.findOne({
-            where: [{ id: addressId }]
+    async deleteAddress(id: number): Promise<UpdateResult> {
+        this._logger.info(`deleteAddress: deleting address [id=${id}]`, {
+            context: AddressService.name,
         });
 
-        innactiveAddress.status= await this.statusService.getStatus(STATUS.INACTIVE.id);
-        addressEntityManager.save(innactiveAddress);
-
-        this.logger.info(`deleteAddress: address deleted succesfully`, { context: AddressService.name }); 
-
-        return "Address deleted succesfully";
+        return await this.addressRepository.update({ id }, { status: { id: STATUS.INACTIVE.id } });
     }
 
     /**
-     * Returns the addresses of a customer
-     * @param customerId logged in customer id
-     * @param addressEntityManager transactional address repository
+     * Returns the addresses of a user
+     * @param userId logged in user id
      */
-    async getAddress(customerId: number, addressEntityManager: Repository<Address>){
-        this.logger.info(`getAddress: getting addresses [customerId=${customerId}]`, { context: AddressService.name });
-
-        let active = STATUS.ACTIVE.id; 
-
-        return await addressEntityManager.find({
-            where: `customer_id = ${customerId} AND status_id = ${active}`,
+    async getAddresses(userId: number): Promise<Address[]> {
+        this._logger.info(`getAddress: getting addresses [userId=${userId}]`, {
+            context: AddressService.name,
         });
+
+        return await this.addressRepository.find({
+            where: { user: { id: userId }, status: { id: STATUS.ACTIVE.id } },
+        });
+    }
+
+    private addressValidationAnalysis(address): boolean {
+        if (address) {
+            if (address.length) {
+                if (address[0].metadata.precision === 'Unknown') {
+                    return false;
+                } else {
+                    return true;
+                }
+            } else {
+                return false;
+            }
+        }
     }
 }

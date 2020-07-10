@@ -3,21 +3,26 @@ import { PaymentsService } from './services/payments.service';
 import { PaymentsController } from './controllers/payments.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { purchasesEntities } from './entities';
-import { ProxyService } from './services/proxy.service';
-import { PaymentGatewayRepository } from './repositories/payment-gateway.repository';
 import { ProductsModule } from '../products/products.module';
-import { CheckoutsService } from './services/checkouts.service';
 import { PaymentsTransactionsRepository } from './transactions/payments.transactions.service';
-import { PlatformManagementModule } from '../platform-management/platform-management.module';
 import { StatussModule } from '../status/status.module';
 import { CartsModule } from '../carts/carts.module';
+import { ConfigModule } from 'src/config/config.module';
+import { CryptocurrenciesService } from './services/cryptocurrencies.service';
+import { CommissionsController } from './controllers/commission.controller';
+import { CommissionsService } from './services/commissions.service';
+import { CommissionsTransactionsRepository } from './transactions/commissions.transactions.service';
+import { UsersModule } from '../users/users.module';
+import { ThirdPartyModule } from '../third-party/third-party.module';
 
 @Module({
     imports: [
         CartsModule,
-        ProductsModule,
         StatussModule,
-        PlatformManagementModule,
+        ProductsModule,
+        UsersModule,
+        ConfigModule,
+        ThirdPartyModule,
         TypeOrmModule.forFeature(purchasesEntities),
         HttpModule.register({
             timeout: 20000,
@@ -26,11 +31,11 @@ import { CartsModule } from '../carts/carts.module';
     ],
     providers: [
         PaymentsTransactionsRepository,
-        PaymentGatewayRepository,
         PaymentsService,
-        ProxyService,
-        CheckoutsService,
+        CommissionsService,
+        CryptocurrenciesService,
+        CommissionsTransactionsRepository,
     ],
-    controllers: [PaymentsController]
+    controllers: [PaymentsController, CommissionsController],
 })
 export class PaymentsModule {}

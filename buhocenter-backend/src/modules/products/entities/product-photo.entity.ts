@@ -1,13 +1,17 @@
-import { Entity,Column,ManyToOne, JoinColumn } from 'typeorm';
-import { BaseEntity } from '../../app/entities/base-entity';
+import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { PrimalEntity } from '../../../app/entities/base-entity';
 import { Product } from './product.entity';
 
-@Entity({ name: 'product_photo' }) 
-export class ProductPhoto extends BaseEntity {
-	@Column({ name: 'content', type: 'varchar', length: 100, nullable: false })
-	content: string;
+@Entity({ name: 'product_photos' })
+export class ProductPhoto extends PrimalEntity {
+    @Column({ name: 'content', type: 'varchar', length: 100, nullable: false })
+    content: string;
 
-	@JoinColumn({ name: 'product_id' })
-	@ManyToOne(type => Product, product => product.photos)
-	product: Product;
+    @JoinColumn({ name: 'product_id' })
+    @ManyToOne(
+        type => Product,
+        product => product.productPhotos,
+        { nullable: false, onUpdate: 'CASCADE' },
+    )
+    product: Product;
 }

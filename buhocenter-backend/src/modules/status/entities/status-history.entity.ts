@@ -1,15 +1,23 @@
-import { Entity,Column,ManyToOne, JoinColumn } from 'typeorm';
-import { BaseEntity } from '../../app/entities/base-entity';
-import { Checkout } from '../../payments/entities/checkout.entity';
-import { Status } from './status.entity'; 
+import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { PrimalEntity } from '../../../app/entities/base-entity';
+import { Status } from './status.entity';
+import { Payment } from '../../payments/entities/payment.entity';
 
-@Entity({ name: 'status_history' }) 
-export class StatusHistory extends BaseEntity {
-	@JoinColumn({ name: 'checkout_id' })
-	@ManyToOne(type => Checkout, checkout => checkout.statusHistories)
-	checkout: Checkout;
+@Entity({ name: 'status_histories' })
+export class StatusHistory extends PrimalEntity {
+    @JoinColumn({ name: 'payment_id' })
+    @ManyToOne(
+        type => Payment,
+        payment => payment.statusHistories,
+        { nullable: false },
+    )
+    payment: Payment;
 
-	@JoinColumn({ name: 'status_id' })
-	@ManyToOne(type => Status, status => status.id)
-	status: Status;
+    @JoinColumn({ name: 'status_id' })
+    @ManyToOne(
+        type => Status,
+        status => status.statusHistories,
+        { nullable: false },
+    )
+    status: Status;
 }

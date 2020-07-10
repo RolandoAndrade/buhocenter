@@ -1,8 +1,8 @@
-import {Inject, Injectable} from '@nestjs/common';
-import {WINSTON_MODULE_PROVIDER} from 'nest-winston';
-import {Logger} from 'winston';
-import {LanguageRepository} from '../repositories/language.repository';
-import {SUCCESS} from '../../../config/constants';
+import { Inject, Injectable } from '@nestjs/common';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
+import { Logger } from 'winston';
+import { LanguageRepository } from '../repositories/language.repository';
+import { SUCCESS } from '../../../config/constants';
 
 @Injectable()
 export class LanguagesService {
@@ -13,16 +13,14 @@ export class LanguagesService {
 
     async getAllLanguages(): Promise<Response> {
         try {
-            this.logger.debug(
-                `getAllLanguages: Implementando peticion a poeditor para obtener lenguajes`,
-                { context: LanguagesService.name },
-            );
+            this.logger.debug(`getAllLanguages: Implementando peticion a poeditor para obtener lenguajes`, {
+                context: LanguagesService.name,
+            });
             return await this.languageRepository.getLanguages();
         } catch (e) {
-            this.logger.error(
-                `getAllLanguages: catch error: ${e.messages}`,
-                { context: LanguagesService.name },
-            );
+            this.logger.error(`getAllLanguages: catch error: ${e.messages}`, {
+                context: LanguagesService.name,
+            });
             return Response.error();
         }
     }
@@ -39,10 +37,9 @@ export class LanguagesService {
             }
             return Response.error();
         } catch (e) {
-            this.logger.error(
-                `getTermsLanguage: catch error: ${e.messages}`,
-                { context: LanguagesService.name },
-            );
+            this.logger.error(`getTermsLanguage: catch error: ${e.messages}`, {
+                context: LanguagesService.name,
+            });
             return Response.error();
         }
     }

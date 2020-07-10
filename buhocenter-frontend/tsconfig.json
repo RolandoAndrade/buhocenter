@@ -14,7 +14,8 @@
     "baseUrl": ".",
     "types": [
       "webpack-env",
-      "vuetify"
+      "vuetify",
+      "jest"
     ],
     "paths": {
       "@/*": [
@@ -32,8 +33,9 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "src/**/*.vue",
-    "tests/**/*.ts",
-    "tests/**/*.tsx"
+    "src/tests/**/*.ts",
+    "src/tests/**/*.tsx",
+    "node_modules/@types/jest/index.d.ts"
   ],
   "exclude": [
     "node_modules"

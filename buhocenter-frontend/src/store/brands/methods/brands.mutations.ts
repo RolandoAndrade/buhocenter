@@ -1,1 +1,0 @@
-export const GET_BRANDS_SUCCESS = 'GET_BRANDS_SUCCESS';

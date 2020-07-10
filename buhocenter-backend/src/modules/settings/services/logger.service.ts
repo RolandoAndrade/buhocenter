@@ -1,12 +1,11 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable } from '@nestjs/common';
 import { WinstonModuleOptionsFactory, WinstonModuleOptions } from 'nest-winston';
-import { transports, format, } from 'winston';
+import { transports, format } from 'winston';
 import * as rTracer from 'cls-rtracer';
 import * as DailyRotateFile from 'winston-daily-rotate-file';
 
 @Injectable()
 export class LoggerSettingsService implements WinstonModuleOptionsFactory {
-    
     public createWinstonModuleOptions(): Partial<WinstonModuleOptions> {
         return {
             exitOnError: false,
@@ -18,7 +17,7 @@ export class LoggerSettingsService implements WinstonModuleOptionsFactory {
                 http: 3,
                 verbose: 4,
                 debug: 5,
-                silly: 6
+                silly: 6,
             },
             transports: [
                 new transports.Console({
@@ -26,7 +25,7 @@ export class LoggerSettingsService implements WinstonModuleOptionsFactory {
                         format.splat(),
                         format.simple(),
                         format.colorize({ message: true }),
-                        format.printf(LoggerSettingsService.consoleLoggerFormat)
+                        format.printf(LoggerSettingsService.consoleLoggerFormat),
                     ),
                 }),
                 new DailyRotateFile({
@@ -34,16 +33,16 @@ export class LoggerSettingsService implements WinstonModuleOptionsFactory {
                     datePattern: 'YYYY-MM-DD',
                     zippedArchive: true,
                     maxFiles: '7d',
-                    dirname: "./logs",
+                    dirname: './logs',
                     format: format.combine(
                         format.splat(),
                         format.simple(),
                         format.colorize({ message: true }),
-                        format.printf(LoggerSettingsService.dailyFileLoggerFormat)
-                    )
-                })
+                        format.printf(LoggerSettingsService.dailyFileLoggerFormat),
+                    ),
+                }),
             ],
-        }
+        };
     }
 
     public static consoleLoggerFormat(info: any) {
@@ -54,7 +53,7 @@ export class LoggerSettingsService implements WinstonModuleOptionsFactory {
         const context: string = info.context ? info.context : 'N/D';
         const msg = format.colorize(info.message ? info.message : '');
 
-        return `${localISOTime} ${requestId} ${(level.options)} [${context}] ${msg.options}`;
+        return `${localISOTime} ${requestId} ${level.options} [${context}] ${msg.options}`;
     }
 
     public static dailyFileLoggerFormat(info: any) {
@@ -65,6 +64,6 @@ export class LoggerSettingsService implements WinstonModuleOptionsFactory {
         const context: string = info.context ? info.context : 'N/D';
         const msg: string = info.message ? info.message : '';
 
-        return `${localISOTime} ${requestId} ${(level.options)} [${context}] ${msg}`;
+        return `${localISOTime} ${requestId} ${level.options} [${context}] ${msg}`;
     }
 }
